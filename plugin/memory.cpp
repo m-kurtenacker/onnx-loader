@@ -20,19 +20,23 @@ void * static_memory (void * somedef1) {
                 }));
 
     const Def* mem = y->param(0);
-    const Def* inner_array;
+    const Def* array;
 
     if (auto size_lit = size->isa<PrimLit>()) {
-        inner_array = world.global(world.indefinite_array(world.type_qs8(), size_lit));
+        u64 size = size_lit->value().get_u64();
+        std::cerr << "Allocating memory of size " << size << "\n";
+        auto target_type = world.ptr_type(world.indefinite_array_type(world.type_qs8()));
+        const Def* inner_array = world.global(world.bottom(world.definite_array_type(world.type_qs8(), size)));
+        array = world.bitcast(target_type, inner_array);
     } else {
         world.dump();
         assert(false);
         const Def* inner_alloca = world.alloc(world.indefinite_array_type(world.type_qs8()), mem, size);
         mem = world.extract(inner_alloca, (int) 0);
-        inner_array = world.extract(inner_alloca, 1);
+        array = world.extract(inner_alloca, 1);
     }
 
-    y->jump(y->param(1), {mem, inner_array});
+    y->jump(y->param(1), {mem, array});
 
     return y;
 }
