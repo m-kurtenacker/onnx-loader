@@ -1,4 +1,4 @@
 plugin/build
 *.thorin.json
 *.ll
-main
+a.out
