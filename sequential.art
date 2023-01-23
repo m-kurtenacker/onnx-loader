@@ -1,0 +1,144 @@
+struct PassManager {
+    alloc: fn (i64) -> Buffer,
+    release: fn (Buffer) -> ()
+}
+
+fn @round_down(n: i32, d: i32) -> i32 {
+  (n / d) * d
+}
+
+fn @vector_loop(body: fn(i32) -> ()) = @|n: i32| {
+    if true {
+        let vector_width = 4;
+        let n_vec = round_down(n, vector_width);
+        for i in range_step(0, n_vec, vector_width) {
+            vectorize(vector_width, |j| @body(i + j))
+        }
+        for i in range(n_vec, n) {
+            @body(i)
+        }
+    } else {
+        for i in range(0, n) {
+            @body(i)
+        }
+    }
+};
+
+struct Tensor[T] {
+    buffer : Buffer,
+    num_dims : i32,
+    size_fn: fn(i32) -> i64,
+    access_fn: fn(&[i64]) -> &mut T
+}
+
+fn @atomic_add (p: &mut f32, d : f32) {
+    atomic[f32](11, p, d, 7, "");
+}
+
+/*#[import(cc = "C", name = "get_buffer")] fn get_buffer_internal(_min_size : i64) -> &mut [i8];
+#[import(cc = "C", name = "release_buffer")] fn release_buffer_internal(_buffer : &mut [i8]) -> ();
+#[import(cc = "C", name = "print_num_allocs")] fn print_num_allocs() -> ();
+
+fn @get_buffer_managed(min_size: i64) = Buffer {
+    data = get_buffer_internal(min_size),
+    size = min_size,
+    device = 0
+};
+
+fn @release_buffer_managed(buffer : Buffer) {
+    release_buffer_internal(buffer.data)
+}*/
+
+#[import(cc = "plugin", name = "static_alloca")] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
+#[import(cc = "plugin", name = "static_release")] fn static_release(&mut [i8]) -> (fn() -> ());
+
+fn @get_buffer_managed(min_size: i64) = Buffer {
+    data = static_alloca(min_size)(),
+    size = min_size,
+    device = 0
+};
+
+fn @release_buffer_managed(_buffer : Buffer) { }
+
+fn alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) -> Tensor[T] {
+    let mut size = 1 as i64;
+    for i in unroll (0, num_dims) {
+        size *= size_fn(i);
+    }
+
+    let buffer = manager.alloc(sizeof[T]() * size);
+
+    let new_access_fn = |n : &[i64]| {
+        let mut address = n(num_dims - 1);
+        for i in unroll(1, num_dims) {
+            address = address * size_fn(i - 1) + n(num_dims - 1 - i);
+        }
+        &mut bitcast[&mut[T]](buffer.data)(address)
+    };
+    Tensor[T] {
+        buffer = buffer,
+        num_dims = num_dims,
+        size_fn = size_fn,
+        access_fn = new_access_fn
+    }
+}
+
+fn release_tensor[T] (manager: PassManager, mat : Tensor[T]) -> () {
+    manager.release(mat.buffer);
+}
+
+fn multi_loop_buffered (body: fn(&[i64]) -> (), current_dim: i32, num_dims: i32, n: &[i64], index_buffer: &mut [i64]) -> () {
+    if current_dim < num_dims {
+        for i in range(0, n(current_dim) as i32) {
+            index_buffer(current_dim) = i as i64;
+            multi_loop_buffered(body, current_dim + 1, num_dims, n, index_buffer);
+        }
+    } else {
+        @body(index_buffer);
+    }
+}
+
+fn @multi_loop_vector2 (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
+    let vector_width = 4;
+    let mut index_buffer_buffer : [Buffer * 4];
+
+    for i in range(0, 4) {
+        let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
+        index_buffer_buffer(i) = index_buffer;
+    }
+
+    for i in vector_loop(n(0) as i32) {
+        let index_buffer = bitcast[&mut[i64]](index_buffer_buffer(i % vector_width).data);
+        index_buffer(0) = i as i64;
+        multi_loop_buffered(body, 1, num_dims, n, index_buffer);
+    }
+
+    for i in range(0, 4) {
+        let index_buffer = index_buffer_buffer(i);
+        manager.release(index_buffer);
+    }
+};
+
+fn @multi_loop (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
+    let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
+
+    multi_loop_buffered(body, 0, num_dims, n, bitcast[&mut[i64]](index_buffer.data));
+
+    manager.release(index_buffer);
+};
+
+fn @multi_loop_vector (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
+    let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
+
+    multi_loop_buffered(body, 0, num_dims, n, bitcast[&mut[i64]](index_buffer.data));
+
+    manager.release(index_buffer);
+};
+
+fn sequential (body: fn(PassManager) -> ()) = @|| {
+    let manager = PassManager {
+        alloc = get_buffer_managed,
+        release = @|buffer| { release_buffer_managed(buffer); }
+    };
+    body(manager);
+};

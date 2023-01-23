@@ -1,0 +1,75 @@
+#[import(cc = "C", name = "read_train_labels")] fn read_train_labels(_labels: &mut &[i32]) -> ();
+#[import(cc = "C", name = "read_train_images")] fn read_train_images(_image_data: &mut &[u8]) -> ();
+#[import(cc = "C", name = "read_test_labels")] fn read_test_labels(_labels: &mut &[i32]) -> ();
+#[import(cc = "C", name = "read_test_images")] fn read_test_images(_image_data: &mut &[u8]) -> ();
+
+#[import(cc = "C", name = "load_matrixA")] fn load_matrixA(_matrixA: &mut [f32]) -> ();
+#[import(cc = "C", name = "load_matrixB")] fn load_matrixB(_matrixB: &mut [f32]) -> ();
+#[import(cc = "C", name = "load_biasA")] fn load_biasA(_biasA: &mut [f32]) -> ();
+#[import(cc = "C", name = "load_biasB")] fn load_biasB(_biasB: &mut [f32]) -> ();
+
+
+struct image_item {
+    image_buffer: Buffer,
+    label: i32
+}
+
+fn read_train() -> &[image_item] {
+    let mut labels: &[i32];
+    let labelspp = &mut labels;
+    read_train_labels(labelspp);
+
+    let mut images: &[u8];
+    let imagespp = &mut images;
+    read_train_images(imagespp);
+
+    let t = runtime_alloc(0,sizeof[image_item]() * 60000);
+    let items = bitcast[&mut[image_item]](t);
+
+    for i in range(0, 60000) {
+        items(i).label = labels(i);
+    }
+
+    for i in range(0, 60000) {
+        items(i).image_buffer = alloc_cpu(sizeof[&[f32]]() * 28);
+        let image = bitcast[&mut[&mut[f32]]](items(i).image_buffer.data);
+        for x in range(0, 28) {
+            image(x) = bitcast[&mut[f32]](runtime_alloc(0, sizeof[f32]() * 28));
+            for y in range(0, 28) {
+                image(x)(y) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
+            }
+        }
+    }
+
+    items
+}
+
+fn read_test() -> &[image_item] {
+    let mut labels: &[i32];
+    let labelspp = &mut labels;
+    read_test_labels(labelspp);
+
+    let mut images: &[u8];
+    let imagespp = &mut images;
+    read_test_images(imagespp);
+
+    let t = runtime_alloc(0,sizeof[image_item]() * 10000);
+    let items = bitcast[&mut[image_item]](t);
+
+    for i in range(0, 10000) {
+        items(i).label = labels(i);
+    }
+
+    for i in range(0, 10000) {
+        items(i).image_buffer = alloc_cpu(sizeof[&[f32]]() * 28);
+        let image = bitcast[&mut[&mut[f32]]](items(i).image_buffer.data);
+        for x in range(0, 28) {
+            image(x) = bitcast[&mut[f32]](runtime_alloc(0, sizeof[f32]() * 28));
+            for y in range(0, 28) {
+                image(x)(y) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
+            }
+        }
+    }
+
+    items
+}
