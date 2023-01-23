@@ -9,7 +9,7 @@ clean:
 	rm -f main.ll a.out
 
 main.ll: main.art sequential.art read.art mat.art plugin/build
-	artic --emit-llvm \
+	artic \
 	      ${THORIN_RUNTIME_PATH}/artic/runtime.impala \
 	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_thorin.impala \
 	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_rv.impala \
