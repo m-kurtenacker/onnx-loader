@@ -10,11 +10,11 @@ clean:
 
 main.ll: main.art sequential.art read.art mat.art plugin/build
 	artic --emit-llvm \
-	      /home/matthiask/Documents/anydsl-networks/runtime/platforms/artic/runtime.impala \
-	      /home/matthiask/Documents/anydsl-networks/runtime/platforms/artic/intrinsics_thorin.impala \
-	      /home/matthiask/Documents/anydsl-networks/runtime/platforms/artic/intrinsics_rv.impala \
-	      /home/matthiask/Documents/anydsl-networks/runtime/platforms/artic/intrinsics_math.impala \
-	      /home/matthiask/Documents/anydsl-networks/runtime/platforms/artic/intrinsics.impala \
+	      ${THORIN_RUNTIME_PATH}/artic/runtime.impala \
+	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_thorin.impala \
+	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_rv.impala \
+	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_math.impala \
+	      ${THORIN_RUNTIME_PATH}/artic/intrinsics.impala \
 	      sequential.art \
 	      read.art \
 	      mat.art \
@@ -25,5 +25,5 @@ main.ll: main.art sequential.art read.art mat.art plugin/build
 	      -o main
 
 a.out: main.ll allocator.cpp read.cpp
-	#clang++ -O3 -L/home/matthiask/Documents/anydsl-networks/runtime/build/lib -lruntime -lm $^
-	clang++ -Og -g -L/home/matthiask/Documents/anydsl-networks/runtime/build/lib -lruntime -lm $^
+	#clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
+	clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
