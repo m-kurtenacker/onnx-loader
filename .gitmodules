@@ -1,0 +1,3 @@
+[submodule "mnist-example"]
+	path = mnist-example
+	url = ssh://git@galadriel.kurdi.dedyn.io:2222/DFKI/mnist-example.git

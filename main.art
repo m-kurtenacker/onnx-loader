@@ -33,10 +33,10 @@ fn main () -> i32 {
         //let biasA = bitcast[&mut[f32]](biasA_Tensor.buffer.data);
         //let biasB = bitcast[&mut[f32]](biasB_Tensor.buffer.data);
 
-        load_matrix_into(matrixA_Tensor, "../mnist.onnx", "stack.0.weight")();
-        load_matrix_into(matrixB_Tensor, "../mnist.onnx", "stack.2.weight")();
-        load_matrix_into(biasA_Tensor, "../mnist.onnx", "stack.0.bias")();
-        load_matrix_into(biasB_Tensor, "../mnist.onnx", "stack.2.bias")();
+        load_matrix_into(matrixA_Tensor, "mnist-example/mnist.onnx", "stack.0.weight")();
+        load_matrix_into(matrixB_Tensor, "mnist-example/mnist.onnx", "stack.2.weight")();
+        load_matrix_into(biasA_Tensor, "mnist-example/mnist.onnx", "stack.0.bias")();
+        load_matrix_into(biasB_Tensor, "mnist-example/mnist.onnx", "stack.2.bias")();
 
         print_f32(*matrixA_Tensor.access_fn([0, 0]));
         print_string("\n");

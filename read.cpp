@@ -25,7 +25,7 @@ typedef union {
 } image_header;
 
 void read_train_labels (int ** labels) {
-    FILE * labels_file = fopen("../mnist/train-labels-idx1-ubyte", "r");
+    FILE * labels_file = fopen("mnist-example/train-labels-idx1-ubyte", "r");
 
     label_header header;
 
@@ -49,7 +49,7 @@ void read_train_labels (int ** labels) {
 }
 
 void read_test_labels (int ** labels) {
-    FILE * labels_file = fopen("../mnist/t10k-labels-idx1-ubyte", "r");
+    FILE * labels_file = fopen("mnist-example/t10k-labels-idx1-ubyte", "r");
 
     label_header header;
 
@@ -73,7 +73,7 @@ void read_test_labels (int ** labels) {
 }
 
 void read_train_images (char ** images) {
-    FILE * labels_file = fopen("../mnist/train-images-idx3-ubyte", "r");
+    FILE * labels_file = fopen("mnist-example/train-images-idx3-ubyte", "r");
 
     image_header header;
 
@@ -97,7 +97,7 @@ void read_train_images (char ** images) {
 }
 
 void read_test_images (char ** images) {
-    FILE * labels_file = fopen("../mnist/t10k-images-idx3-ubyte", "r");
+    FILE * labels_file = fopen("mnist-example/t10k-images-idx3-ubyte", "r");
 
     image_header header;
 
