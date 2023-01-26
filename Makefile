@@ -3,10 +3,11 @@ all: a.out
 
 .PHONY: plugin/build
 plugin/build:
-	@make -C plugin/build
+	@make -C plugin/build all
 
 clean:
 	rm -f main.ll a.out main.thorin.json
+	@make -C plugin/build clean
 
 main.thorin.json: main.art sequential.art read.art mat.art
 	artic \
