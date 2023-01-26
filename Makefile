@@ -1,65 +1,92 @@
 .PHONY: all clean
 all: a.out
 
-.PHONY: plugin/build
-plugin/build:
+plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp
 	@make -C plugin/build all
 
 clean:
-	rm -f main.ll a.out main.thorin.json
+	rm -f *.ll *.thorin.json a.out
 	@make -C plugin/build clean
 
-main.thorin.json: main.art sequential.art read.art mat.art
-	artic \
-	      ${THORIN_RUNTIME_PATH}/artic/runtime.impala \
-	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_thorin.impala \
-	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_rv.impala \
-	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_math.impala \
-	      ${THORIN_RUNTIME_PATH}/artic/intrinsics.impala \
-	      sequential.art \
-	      read.art \
-	      mat.art \
-	      main.art \
-	      --emit-json \
-	      --log-level info \
-	      -o main
+RUNTIME=${THORIN_RUNTIME_PATH}/artic/runtime.impala \
+	${THORIN_RUNTIME_PATH}/artic/intrinsics_thorin.impala \
+	${THORIN_RUNTIME_PATH}/artic/intrinsics_rv.impala \
+	${THORIN_RUNTIME_PATH}/artic/intrinsics_math.impala \
+	${THORIN_RUNTIME_PATH}/artic/intrinsics.impala
 
-/*main.ll: main.art sequential.art read.art mat.art plugin/build
+network.thorin.json: network.art sequential.art mat.art
 	artic \
-	      ${THORIN_RUNTIME_PATH}/artic/runtime.impala \
-	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_thorin.impala \
-	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_rv.impala \
-	      ${THORIN_RUNTIME_PATH}/artic/intrinsics_math.impala \
-	      ${THORIN_RUNTIME_PATH}/artic/intrinsics.impala \
-	      sequential.art \
-	      read.art \
-	      mat.art \
-	      main.art \
-	      --plugin plugin/build/loader.so \
-	      --emit-llvm \
-	      --log-level info \
-	      -o main*/
+		${RUNTIME} \
+		$^ \
+		--emit-json \
+		--log-level info \
+		-o network
 
-main.ll: main.thorin.json plugin/build
+main.thorin.json: main.art read.art
+	artic \
+		${RUNTIME} \
+		$^ \
+		--emit-json \
+		--log-level info \
+		-o main
+
+network-compiled.thorin.json: network.thorin.json plugin/build/loader.so
 	anyopt \
-              main.thorin.json \
-              --pass cleanup_world \
-              --pass pe \
-              --pass flatten_tuples \
-              --pass clone_bodies \
-              --pass split_slots \
-              --pass plugin_execute \
-              --pass lift_builtins \
-              --pass inliner \
-              --pass hoist_enters \
-              --pass dead_load_opt \
-              --pass cleanup_world \
-              --pass codegen_prepare \
-	      --plugin plugin/build/loader.so \
-	      --emit-llvm \
-	      --log-level info \
-	      -o main
+		network.thorin.json \
+		--pass cleanup_world \
+		--pass pe \
+		--pass plugin_execute \
+		--pass cleanup_world \
+		--plugin plugin/build/loader.so \
+		--emit-json \
+		--log-level info \
+		-o network-compiled
 
-a.out: main.ll allocator.cpp read.cpp
+network.ll: network-compiled.thorin.json
+	anyopt \
+		$^ \
+		--pass cleanup_world \
+		--pass pe \
+		--pass flatten_tuples \
+		--pass clone_bodies \
+		--pass split_slots \
+		--pass lift_builtins \
+		--pass inliner \
+		--pass hoist_enters \
+		--pass dead_load_opt \
+		--pass cleanup_world \
+		--pass codegen_prepare \
+		--emit-llvm \
+		--log-level info \
+		-o network
+
+network2.ll: network.thorin.json plugin/build/loader.so
+	anyopt \
+		network.thorin.json \
+		--pass cleanup_world \
+		--pass pe \
+		--pass flatten_tuples \
+		--pass clone_bodies \
+		--pass split_slots \
+		--pass plugin_execute \
+		--pass lift_builtins \
+		--pass inliner \
+		--pass hoist_enters \
+		--pass dead_load_opt \
+		--pass cleanup_world \
+		--pass codegen_prepare \
+		--plugin plugin/build/loader.so \
+		--emit-llvm \
+		--log-level info \
+		-o network
+
+main.ll: main.thorin.json
+	anyopt \
+		$^ \
+		--emit-llvm \
+		--log-level info \
+		-o main
+
+a.out: main.ll network.ll allocator.cpp read.cpp
 	#clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
 	clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^

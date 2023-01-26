@@ -1,0 +1,51 @@
+#[import(cc = "plugin", name = "load_matrix_into")] fn load_matrix_into(_tensor: Tensor[f32], _file_name: &[u8], _matrix_name: &[u8]) -> (fn () -> ());
+
+fn @execute_network(manager : PassManager, target : i32, matrixA_Tensor : Tensor[f32], matrixB_Tensor : Tensor[f32], biasA_Tensor : Tensor[f32], biasB_Tensor : Tensor[f32], image_Tensor : Tensor[f32]) -> f32 {
+    let flat_Tensor = matrix_flatten[f32](manager, image_Tensor);
+    let mult_result = matrix_multiply(manager, matrixA_Tensor, flat_Tensor);
+    release_tensor(manager, flat_Tensor);
+    let add_result = matrix_add(manager, mult_result, biasA_Tensor);
+    release_tensor(manager, mult_result);
+    let relu_result = matrix_relu(manager, add_result);
+    release_tensor(manager, add_result);
+    let mult_result_B = matrix_multiply(manager, matrixB_Tensor, relu_result);
+    release_tensor(manager, relu_result);
+    let add_result_B = matrix_add(manager, mult_result_B, biasB_Tensor);
+    release_tensor(manager, mult_result_B);
+    let soft_result = matrix_softmax(manager, add_result_B);
+    release_tensor(manager, add_result_B);
+    let a = matrix_sparsecrossentropy(manager, soft_result, target);
+    release_tensor(manager, soft_result);
+
+    a
+}
+
+#[export]
+fn @run_network(image : &[&[f32]], label : i32) -> f32 {
+    let mut error : f32;
+    for manager in sequential() {
+        let matrixA_Tensor = @alloc_tensor[f32](manager, 2, @|n| { [784, 128](n) as i64 });
+        let matrixB_Tensor = @alloc_tensor[f32](manager, 2, @|n| { [128, 10](n) as i64 });
+        let biasA_Tensor = @alloc_tensor[f32](manager, 1, @|_n| { 128 as i64 });
+        let biasB_Tensor = @alloc_tensor[f32](manager, 1, @|_n| { 10 as i64 });
+
+        load_matrix_into(matrixA_Tensor, "mnist-example/mnist.onnx", "stack.0.weight")();
+        load_matrix_into(matrixB_Tensor, "mnist-example/mnist.onnx", "stack.2.weight")();
+        load_matrix_into(biasA_Tensor, "mnist-example/mnist.onnx", "stack.0.bias")();
+        load_matrix_into(biasB_Tensor, "mnist-example/mnist.onnx", "stack.2.bias")();
+
+        //print_f32(*matrixA_Tensor.access_fn([0, 0]));
+        //print_string("\n");
+
+        let image_Tensor = @alloc_tensor[f32](manager, 2, @|_n| { 28 as i64 });
+        for x in range(0, 28) {
+            for y in range(0, 28) {
+                *image_Tensor.access_fn([x as i64, y as i64]) = image(x)(y);
+            }
+        }
+
+        error = execute_network(manager, label, matrixA_Tensor, matrixB_Tensor, biasA_Tensor, biasB_Tensor, image_Tensor);
+    }
+
+    error
+}
