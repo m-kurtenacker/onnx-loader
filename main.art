@@ -20,49 +20,54 @@ fn @execute_network(manager : PassManager, target : i32, matrixA_Tensor : Tensor
     a
 }
 
-#[export]
-fn main () -> i32 {
+fn @run_network(image : &[&[f32]], label : i32) -> f32 {
+    let mut error : f32;
     for manager in sequential() {
         let matrixA_Tensor = @alloc_tensor[f32](manager, 2, @|n| { [784, 128](n) as i64 });
         let matrixB_Tensor = @alloc_tensor[f32](manager, 2, @|n| { [128, 10](n) as i64 });
         let biasA_Tensor = @alloc_tensor[f32](manager, 1, @|_n| { 128 as i64 });
         let biasB_Tensor = @alloc_tensor[f32](manager, 1, @|_n| { 10 as i64 });
 
-        //let matrixA = bitcast[&mut[f32]](matrixA_Tensor.buffer.data);
-        //let matrixB = bitcast[&mut[f32]](matrixB_Tensor.buffer.data);
-        //let biasA = bitcast[&mut[f32]](biasA_Tensor.buffer.data);
-        //let biasB = bitcast[&mut[f32]](biasB_Tensor.buffer.data);
-
         load_matrix_into(matrixA_Tensor, "mnist-example/mnist.onnx", "stack.0.weight")();
         load_matrix_into(matrixB_Tensor, "mnist-example/mnist.onnx", "stack.2.weight")();
         load_matrix_into(biasA_Tensor, "mnist-example/mnist.onnx", "stack.0.bias")();
         load_matrix_into(biasB_Tensor, "mnist-example/mnist.onnx", "stack.2.bias")();
 
-        print_f32(*matrixA_Tensor.access_fn([0, 0]));
-        print_string("\n");
+        //print_f32(*matrixA_Tensor.access_fn([0, 0]));
+        //print_string("\n");
 
-        let data_train = read_train();
-        //let data_test = read_test();
-
-        let mut sum = 0 as f32;
-        for i in range(0, 600) {
-            let image_buffer = data_train(i).image_buffer;
-            let image = bitcast[&mut[&mut[f32]]](image_buffer.data);
-
-            let image_Tensor = @alloc_tensor[f32](manager, 2, @|_n| { 28 as i64 });
-            for x in range(0, 28) {
-                for y in range(0, 28) {
-                    *image_Tensor.access_fn([x as i64, y as i64]) = image(x)(y);
-                }
+        let image_Tensor = @alloc_tensor[f32](manager, 2, @|_n| { 28 as i64 });
+        for x in range(0, 28) {
+            for y in range(0, 28) {
+                *image_Tensor.access_fn([x as i64, y as i64]) = image(x)(y);
             }
-
-            let error = execute_network(manager, data_train(i).label, matrixA_Tensor, matrixB_Tensor, biasA_Tensor, biasB_Tensor, image_Tensor);
-            sum += error;
         }
 
-        print_f32(sum / 600.0);
-        print_string("\n");
+        error = execute_network(manager, label, matrixA_Tensor, matrixB_Tensor, biasA_Tensor, biasB_Tensor, image_Tensor);
     }
+
+    error
+}
+
+#[export]
+fn main () -> i32 {
+    let num_tests = 60000;
+
+    let data_train = read_train();
+    //let data_test = read_test();
+
+    let mut sum = 0 as f32;
+    for i in range(0, num_tests) {
+        let image_buffer = data_train(i).image_buffer;
+        let image = bitcast[&[&[f32]]](image_buffer.data);
+
+
+        let error = run_network(image, data_train(i).label);
+        sum += error;
+    }
+
+    print_f32(sum / (num_tests as f32));
+    print_string("\n");
 
     0
 }
