@@ -1,25 +1,32 @@
-#[import(cc="C", name="run_network")]
+#[intern]
 fn @run_network(image : &[&[f32]], label : i32) -> f32;
 
 #[export]
 fn main () -> i32 {
-    let num_tests = 60000;
+    let num_tests = 6000;
 
-    let data_train = read_train();
-    //let data_test = read_test();
+    //let data_train = read_train();
+    let data_test = read_test();
+
+    print_string("Starting test\n");
 
     let mut sum = 0 as f32;
-    for i in range(0, num_tests) {
-        let image_buffer = data_train(i).image_buffer;
-        let image = bitcast[&[&[f32]]](image_buffer.data);
+    for benchmark_cpu() {
+        for i in range(0, num_tests) {
+            let image_buffer = data_test(i).image_buffer;
+            let image = bitcast[&[&[f32]]](image_buffer.data);
 
-
-        let error = run_network(image, data_train(i).label);
-        sum += error;
+            let error = run_network(image, data_test(i).label);
+            sum += error;
+            //print_i32(i);
+            //print_string("\n");
+        }
     }
 
     print_f32(sum / (num_tests as f32));
     print_string("\n");
+
+    print_total_timing();
 
     0
 }

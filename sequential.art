@@ -49,7 +49,7 @@ fn @release_buffer_managed(buffer : Buffer) {
     release_buffer_internal(buffer.data)
 }*/
 
-#[import(cc = "plugin", name = "static_alloca")] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
+#[import(cc = "plugin", name = "static_alloca", depends = load_matrix_into)] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
 #[import(cc = "plugin", name = "static_release")] fn static_release(&mut [i8]) -> (fn() -> ());
 
 fn @get_buffer_managed(min_size: i64) = Buffer {
@@ -98,11 +98,11 @@ fn multi_loop_buffered (body: fn(&[i64]) -> (), current_dim: i32, num_dims: i32,
     }
 }
 
-fn @multi_loop_vector2 (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
+fn @multi_loop_vector (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
     let vector_width = 4;
     let mut index_buffer_buffer : [Buffer * 4];
 
-    for i in range(0, 4) {
+    for i in range(0, vector_width) {
         let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
         index_buffer_buffer(i) = index_buffer;
     }
@@ -113,10 +113,35 @@ fn @multi_loop_vector2 (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_di
         multi_loop_buffered(body, 1, num_dims, n, index_buffer);
     }
 
-    for i in range(0, 4) {
+    for i in range(0, vector_width) {
         let index_buffer = index_buffer_buffer(i);
         manager.release(index_buffer);
     }
+};
+
+fn @multi_loop_parallel (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
+    let threads = n(0);
+    //let mut index_buffer_buffer : [Buffer * threads];
+    let index_buffer_buffer_buffer = manager.alloc(sizeof[Buffer]() * threads);
+    let mut index_buffer_buffer = bitcast[&mut[Buffer]](index_buffer_buffer_buffer.data);
+
+    for i in range(0, threads as i32) {
+        let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
+        index_buffer_buffer(i) = index_buffer;
+    }
+
+    for i in parallel_loop(threads as i32) {
+        let index_buffer = bitcast[&mut[i64]](index_buffer_buffer(i).data);
+        index_buffer(0) = i as i64;
+        multi_loop_buffered(body, 1, num_dims, n, index_buffer);
+    }
+
+    for i in range(0, threads as i32) {
+        let index_buffer = index_buffer_buffer(i);
+        manager.release(index_buffer);
+    }
+
+    manager.release(index_buffer_buffer_buffer);
 };
 
 fn @multi_loop (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
@@ -127,13 +152,33 @@ fn @multi_loop (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32,
     manager.release(index_buffer);
 };
 
-fn @multi_loop_vector (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
-    let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
-
-    multi_loop_buffered(body, 0, num_dims, n, bitcast[&mut[i64]](index_buffer.data));
-
-    manager.release(index_buffer);
+fn @vector_loop_sequential(body: fn (i32) -> ()) = @|index : &[i64]| {
+    let vector_width = 4;
+    let lane = index(0) as i32 % vector_width;
+    for i in unroll(0, vector_width) {
+        if i == lane {
+            @body(i);
+        }
+    }
 };
+
+fn @rv_sequential(body: fn (i32) -> ()) = @|| {
+    let vector_width = 4;
+    let lane = rv_lane_id();
+    for i in unroll(0, vector_width) {
+        if i == lane {
+            @body(i);
+        }
+    }
+};
+
+//fn @multi_loop_vector (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
+//    let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
+//
+//    multi_loop_buffered(body, 0, num_dims, n, bitcast[&mut[i64]](index_buffer.data));
+//
+//    manager.release(index_buffer);
+//};
 
 fn sequential (body: fn(PassManager) -> ()) = @|| {
     let manager = PassManager {

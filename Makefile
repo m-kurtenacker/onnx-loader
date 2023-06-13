@@ -22,7 +22,7 @@ network.thorin.json: network.art sequential.art mat.art
 		--log-level info \
 		-o network
 
-main.thorin.json: main.art read.art
+main.thorin.json: main.art read.art utils.art
 	artic \
 		${RUNTIME} \
 		$^ \
@@ -42,7 +42,7 @@ network-compiled.thorin.json: network.thorin.json plugin/build/loader.so
 		--log-level info \
 		-o network-compiled
 
-network.ll: network-compiled.thorin.json
+combined.ll: main.thorin.json network-compiled.thorin.json
 	anyopt \
 		$^ \
 		--pass cleanup_world \
@@ -50,25 +50,6 @@ network.ll: network-compiled.thorin.json
 		--pass flatten_tuples \
 		--pass clone_bodies \
 		--pass split_slots \
-		--pass lift_builtins \
-		--pass inliner \
-		--pass hoist_enters \
-		--pass dead_load_opt \
-		--pass cleanup_world \
-		--pass codegen_prepare \
-		--emit-llvm \
-		--log-level info \
-		-o network
-
-network2.ll: network.thorin.json plugin/build/loader.so
-	anyopt \
-		network.thorin.json \
-		--pass cleanup_world \
-		--pass pe \
-		--pass flatten_tuples \
-		--pass clone_bodies \
-		--pass split_slots \
-		--pass plugin_execute \
 		--pass lift_builtins \
 		--pass inliner \
 		--pass hoist_enters \
@@ -78,15 +59,8 @@ network2.ll: network.thorin.json plugin/build/loader.so
 		--plugin plugin/build/loader.so \
 		--emit-llvm \
 		--log-level info \
-		-o network
+		-o combined
 
-main.ll: main.thorin.json
-	anyopt \
-		$^ \
-		--emit-llvm \
-		--log-level info \
-		-o main
-
-a.out: main.ll network.ll allocator.cpp read.cpp
-	#clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
-	clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
+a.out: combined.ll allocator.cpp read.cpp
+	clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
+	#clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^

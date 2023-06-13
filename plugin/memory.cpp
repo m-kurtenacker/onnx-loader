@@ -29,7 +29,7 @@ void * static_memory (void * somedef1) {
         const Def* inner_array = world.global(world.bottom(world.definite_array_type(world.type_qs8(), size)));
         array = world.bitcast(target_type, inner_array);
     } else {
-        world.dump();
+        return y;
         assert(false);
         const Def* inner_alloca = world.alloc(world.indefinite_array_type(world.type_qs8()), mem, size);
         mem = world.extract(inner_alloca, (int) 0);

@@ -17,9 +17,20 @@ fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32])
         input_dims(index) = input.size_fn(index);
     }
 
+    let mut matrix_dims_buffer_buffer : [Buffer * 4];
+
     for index in multi_loop_vector (manager, num_result_dims, result_dims) {
-        let matrix_dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-        let matrix_dims = bitcast[&mut [i64]](matrix_dims_buffer.data);
+    //for index in multi_loop (manager, num_result_dims, result_dims) {
+        let matrix_dims = if true {
+            for i in vector_loop_sequential(index) {
+                let matrix_dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+                matrix_dims_buffer_buffer(i) = matrix_dims_buffer;
+            }
+            bitcast[&mut [i64]](matrix_dims_buffer_buffer(index(0) % 4).data)
+        } else {
+            let matrix_dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+            bitcast[&mut [i64]](matrix_dims_buffer.data)
+        };
 
         for i in range(0, num_result_dims) {
             matrix_dims(input.num_dims + i) = index(i)
@@ -38,7 +49,7 @@ fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32])
 
         *output.access_fn(index) = sum;
 
-        manager.release(matrix_dims_buffer);
+        //manager.release(matrix_dims_buffer);
     }
 
     manager.release(result_dims_buffer);

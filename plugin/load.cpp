@@ -8,6 +8,9 @@
 #include <onnx/proto_utils.h>
 #include <onnx/common/file_utils.h>
 
+#include <sys/resource.h>
+#include <stdio.h>
+
 using namespace thorin;
 using namespace ONNX_NAMESPACE;
 
