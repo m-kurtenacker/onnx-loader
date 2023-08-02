@@ -1,11 +1,10 @@
-.PHONY: all clean
+.PHONY: all clean clean-all
 all: a.out
 
-plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp
-	@make -C plugin/build all
-
 clean:
-	rm -f *.ll *.thorin.json a.out
+	rm -f *.ll *.thorin.json a.out test minimized
+
+clean-all: clean
 	@make -C plugin/build clean
 
 RUNTIME=${THORIN_RUNTIME_PATH}/artic/runtime.impala \
@@ -14,13 +13,10 @@ RUNTIME=${THORIN_RUNTIME_PATH}/artic/runtime.impala \
 	${THORIN_RUNTIME_PATH}/artic/intrinsics_math.impala \
 	${THORIN_RUNTIME_PATH}/artic/intrinsics.impala
 
-network.thorin.json: network.art sequential.art mat.art
-	artic \
-		${RUNTIME} \
-		$^ \
-		--emit-json \
-		--log-level info \
-		-o network
+
+plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp
+	@make -C plugin/build all
+
 
 main.thorin.json: main.art read.art utils.art
 	artic \
@@ -29,6 +25,14 @@ main.thorin.json: main.art read.art utils.art
 		--emit-json \
 		--log-level info \
 		-o main
+
+network.thorin.json: network.art sequential.art mat.art
+	artic \
+		${RUNTIME} \
+		$^ \
+		--emit-json \
+		--log-level info \
+		-o network
 
 network-compiled.thorin.json: network.thorin.json plugin/build/loader.so
 	anyopt \
@@ -42,9 +46,9 @@ network-compiled.thorin.json: network.thorin.json plugin/build/loader.so
 		--log-level info \
 		-o network-compiled
 
-combined.ll: main.thorin.json network-compiled.thorin.json
+combined.ll: main.thorin.json network-compiled.thorin.json plugin/build/loader.so
 	anyopt \
-		$^ \
+		main.thorin.json network-compiled.thorin.json \
 		--pass cleanup_world \
 		--pass pe \
 		--pass flatten_tuples \
@@ -62,5 +66,5 @@ combined.ll: main.thorin.json network-compiled.thorin.json
 		-o combined
 
 a.out: combined.ll allocator.cpp read.cpp
-	clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
-	#clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
+	#clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
+	clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
