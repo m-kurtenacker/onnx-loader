@@ -5,7 +5,10 @@ project (onnx_loader)
 option(PROFILE "profile the loader execution with gprof" OFF)
 
 find_package(Thorin REQUIRED)
+
 find_package(Protobuf REQUIRED)
+find_package(absl REQUIRED)
+find_package(utf8_range REQUIRED)
 find_package(ONNX REQUIRED)
 
 add_library(

@@ -13,6 +13,12 @@ RUNTIME=${THORIN_RUNTIME_PATH}/artic/runtime.impala \
 	${THORIN_RUNTIME_PATH}/artic/intrinsics_math.impala \
 	${THORIN_RUNTIME_PATH}/artic/intrinsics.impala
 
+.PHONY: onnx
+onnx:
+	mkdir -p onnx/build
+	cd onnx/build
+	cmake .. -GNinja -DCMAKE_CXX_STANDARD=17 -DCMAKE_C_STANDARD=17 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_INSTALL_PREFIX=../install
+	ninja install
 
 plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp
 	@make -C plugin/build all
