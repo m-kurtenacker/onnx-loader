@@ -14,7 +14,7 @@
 using namespace thorin;
 using namespace ONNX_NAMESPACE;
 
-std::string const_string_parse(Def* namedef) {
+std::string const_string_parse(const Def* namedef) {
     const Bitcast * bitcast = namedef->isa<Bitcast>();
     assert(bitcast);
 
@@ -33,10 +33,10 @@ std::string const_string_parse(Def* namedef) {
     return array->as_string();
 }
 
-void * test (void * somedef1, void * somedef2, void * somedef3) {
-    Def* matrix = (Def *) somedef1;
-    Def* onnx_name_def = (Def*) somedef2;
-    Def* reference_def = (Def*) somedef3;
+void * load_matrix (World* world, App* app) {
+    const Def* matrix = app->arg(1);
+    const Def* onnx_name_def = app->arg(2);
+    const Def* reference_def = app->arg(3);
 
     const std::string model_path = const_string_parse(onnx_name_def);
     std::cerr << "Loading model " << model_path << std::endl;
@@ -84,22 +84,20 @@ void * test (void * somedef1, void * somedef2, void * somedef3) {
     const char * raw_data = data_str.c_str();
     const float * data_float = (float*) raw_data;
 
-    World& world = matrix->world();
-
     //Get float buffer from tensor object
-    auto buffer = world.extract(matrix, (u32) 0);
-    auto buffer_data = world.extract(buffer, (u32) 0);
-    auto tensor_data = world.bitcast(world.ptr_type(world.indefinite_array_type(world.type_qf32())), buffer_data);
+    auto buffer = world->extract(matrix, (u32) 0);
+    auto buffer_data = world->extract(buffer, (u32) 0);
+    auto tensor_data = world->bitcast(world->ptr_type(world->indefinite_array_type(world->type_qf32())), buffer_data);
 
-    Continuation* y = world.continuation(world.fn_type({world.mem_type(), world.fn_type({world.mem_type()})}));
+    Continuation* y = world->continuation(world->fn_type({world->mem_type(), world->fn_type({world->mem_type()})}));
     const Def* mem = y->param(0);
 
     //Write data directly into buffer.
     //The target data layout has to be equal to what is used in the onnx model.
     for (size_t i = 0; i < tensor_num_elements; i++) {
-        auto lea = world.lea(tensor_data, world.literal_qs32(i, {}), {});
-        auto data_const = world.literal_qf32(data_float[i], {});
-        mem = world.store(mem, lea, data_const);
+        auto lea = world->lea(tensor_data, world->literal_qs32(i, {}), {});
+        auto data_const = world->literal_qf32(data_float[i], {});
+        mem = world->store(mem, lea, data_const);
     }
 
     y->jump(y->param(1), {mem});
@@ -109,7 +107,7 @@ void * test (void * somedef1, void * somedef2, void * somedef3) {
 
 extern "C" {
 
-void * load_matrix_into (size_t input_c, void ** input_v) {
+void * load_matrix_into (World* world, App* app) {
     //input_v[0]: file name
     //input_v[1]: matrix name
     //input_v[2]: target tensor
@@ -117,8 +115,19 @@ void * load_matrix_into (size_t input_c, void ** input_v) {
     //
     //TODO: how is memory handled here?
     
-    assert(input_c == 3);
-    return test(input_v[0], input_v[1], input_v[2]);
+    return load_matrix(world, app);
+}
+
+void init_old () {
+    fprintf(stdout, "Setting stack limits\n");
+
+    struct rlimit rl;
+    int result = getrlimit(RLIMIT_STACK, &rl);
+
+    fprintf(stdout, "Current Stack limit: %d\n", rl.rlim_cur);
+    rl.rlim_cur = 64L * 1024L * 1024L;
+    result = setrlimit(RLIMIT_STACK, &rl);
+    assert(result == 0);
 }
 
 }
