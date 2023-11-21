@@ -2,7 +2,7 @@
 all: a.out
 
 clean:
-	rm -f *.ll *.thorin.json a.out test minimized
+	rm -f *.ll *.thorin.json a.out b.out test minimized
 
 clean-all: clean
 	@make -C plugin/build clean
@@ -23,6 +23,9 @@ onnx:
 		ninja install
 
 plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp
+	@make -C plugin/build all
+
+plugin/build/loader_runtime.so: plugin/load_runtime.cpp
 	@make -C plugin/build all
 
 main.thorin.json: main.art read.art utils.art
@@ -71,6 +74,9 @@ combined.ll: main.thorin.json network-compiled.thorin.json plugin/build/loader.s
 		--log-level ${LOG_LEVEL} \
 		-o combined
 
-a.out: combined.ll allocator.cpp read.cpp
-	#clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
-	clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
+a.out: combined.ll allocator.cpp read.cpp plugin/build/loader_runtime.so
+	clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
+
+#a.out: combined.ll allocator.cpp read.cpp
+#	clang++ -o a.out -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
+#	#clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^

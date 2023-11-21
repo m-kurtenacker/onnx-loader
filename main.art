@@ -23,8 +23,16 @@ fn main () -> i32 {
         }
     }
 
-    print_f32(sum / (num_tests as f32));
+    let final_result = sum / (num_tests as f32);
+
+    print_f32(final_result);
     print_string("\n");
+
+    if (final_result < 3.129) {
+        print_string("Result better then expected.\n");
+    } else if (final_result > 3.13) {
+        print_string("Result worse then expected.\n");
+    }
 
     print_total_timing();
 

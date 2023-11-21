@@ -19,7 +19,16 @@ add_library(
 )
 set_target_properties(loader PROPERTIES PREFIX "" CXX_STANDARD 17)
 
-target_link_libraries(loader ${Thorin_LIBRARIES} onnx)
+
+add_library(
+    loader_runtime
+    SHARED
+    load_runtime.cpp
+)
+set_target_properties(loader_runtime PROPERTIES PREFIX "" CXX_STANDARD 17)
+
+target_link_libraries(loader ${Thorin_LIBRARIES} ONNX::onnx)
+target_link_libraries(loader_runtime ONNX::onnx)
 
 set(CMAKE_CXX_FLAGS "-DONNX_ML=1 -DONNX_NAMESPACE=onnx")
 
@@ -30,3 +39,4 @@ if (PROFILE)
 endif()
 
 target_include_directories(loader PUBLIC ${Thorin_INCLUDE_DIRS} ${ONNX_INCLUDE_DIRS})
+target_include_directories(loader_runtime PUBLIC ${ONNX_INCLUDE_DIRS})

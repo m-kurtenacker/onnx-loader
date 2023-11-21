@@ -17,39 +17,29 @@ fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32])
         input_dims(index) = input.size_fn(index);
     }
 
-    let mut matrix_dims_buffer_buffer : [Buffer * 4];
-
-    for index in multi_loop_vector (manager, num_result_dims, result_dims) {
-    //for index in multi_loop (manager, num_result_dims, result_dims) {
-        let matrix_dims = if true {
-            for i in vector_loop_sequential(index) {
-                let matrix_dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-                matrix_dims_buffer_buffer(i) = matrix_dims_buffer;
-            }
-            bitcast[&mut [i64]](matrix_dims_buffer_buffer(index(0) % 4).data)
-        } else {
-            let matrix_dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-            bitcast[&mut [i64]](matrix_dims_buffer.data)
-        };
+    for instance in multi_loop (manager, num_result_dims, result_dims) {
+        let matrix_dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+        let matrix_dims = bitcast[&mut [i64]](matrix_dims_buffer.data);
 
         for i in range(0, num_result_dims) {
-            matrix_dims(input.num_dims + i) = index(i)
+            matrix_dims(input.num_dims + i) = instance.index(i)
         }
 
         let mut sum = 0 as f32;
 
-        for inner_index in multi_loop (manager, input.num_dims, input_dims) {
+        for inner_instance in multi_loop (manager, input.num_dims, input_dims) {
             for i in range(0, input.num_dims) {
-                matrix_dims(i) = inner_index(i);
+                matrix_dims(i) = inner_instance.index(i);
             }
 
-            let d = (*mat.access_fn(matrix_dims)) * (*input.access_fn(inner_index));
+            let d = (*mat.access_fn(matrix_dims)) * (*input.access_fn(inner_instance.index));
             sum += d;
+            //atomic_add(&mut sum, d);
         }
 
-        *output.access_fn(index) = sum;
+        *output.access_fn(instance.index) = sum;
 
-        //manager.release(matrix_dims_buffer);
+        manager.release(matrix_dims_buffer);
     }
 
     manager.release(result_dims_buffer);
@@ -63,15 +53,16 @@ fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> T
 
     let dims_buffer = manager.alloc(sizeof[i64]() * matA.num_dims as i64);
     let dims = bitcast[&mut [i64]](dims_buffer.data);
-    for index in vector_loop(matA.num_dims) {
+    //for index in vector_loop(matA.num_dims) {
+    for index in range(0, matA.num_dims) {
         dims(index) = matA.size_fn(index);
     }
 
-    for index in multi_loop_vector (manager, matA.num_dims, dims) {
-        let A = *matA.access_fn(index);
-        let B = *matB.access_fn(index);
+    for instance in multi_loop (manager, matA.num_dims, dims) {
+        let A = *matA.access_fn(instance.index);
+        let B = *matB.access_fn(instance.index);
 
-        *output.access_fn(index) = A + B;
+        *output.access_fn(instance.index) = A + B;
     }
 
     manager.release(dims_buffer);
@@ -88,10 +79,10 @@ fn @matrix_relu (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
         dims(index) = mat.size_fn(index);
     }
 
-    for index in multi_loop_vector (manager, mat.num_dims, dims) {
-        let d = *mat.access_fn(index);
+    for instance in multi_loop_vector (manager, mat.num_dims, dims) {
+        let d = *mat.access_fn(instance.index);
         let r = if d < 0 { 0 as f32 } else { d };
-        *output.access_fn(index) = r;
+        *output.access_fn(instance.index) = r;
     }
 
     manager.release(dims_buffer);
@@ -145,15 +136,15 @@ fn @matrix_softmax (manager: PassManager, mat: Tensor[f32]) {
         dims(index) = mat.size_fn(index);
     }
 
-    for index in multi_loop_vector (manager, mat.num_dims, dims) {
-        let data = math_builtins::exp(*mat.access_fn(index));
-        *output.access_fn(index) = data;
+    for instance in multi_loop_vector (manager, mat.num_dims, dims) {
+        let data = math_builtins::exp(*mat.access_fn(instance.index));
+        *output.access_fn(instance.index) = data;
         atomic[f32](11, sump, data, 7, "");
     }
 
-    for index in multi_loop_vector (manager, mat.num_dims, dims) {
-        let data = *output.access_fn(index);
-        *output.access_fn(index) = data / sum;
+    for instance in multi_loop_vector (manager, mat.num_dims, dims) {
+        let data = *output.access_fn(instance.index);
+        *output.access_fn(instance.index) = data / sum;
     }
 
     manager.release(dims_buffer);
@@ -162,14 +153,14 @@ fn @matrix_softmax (manager: PassManager, mat: Tensor[f32]) {
 }
 
 fn @matrix_sparsecrossentropy (manager: PassManager, mat: Tensor[f32], expected: i32) -> f32 {
-    let index_buffer_buffer = @manager.alloc(sizeof[i64]() * 1 as i64);
+    let index_buffer_buffer = manager.alloc(sizeof[i64]() * 1 as i64);
     let index_buffer = bitcast[&mut[i64]](index_buffer_buffer.data);
 
     index_buffer(0) = expected as i64;
 
     let r = - math_builtins::log(*mat.access_fn(index_buffer));
 
-    @manager.release(index_buffer_buffer);
+    manager.release(index_buffer_buffer);
 
     r
 }

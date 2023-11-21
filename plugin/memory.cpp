@@ -92,9 +92,6 @@ void * static_array_set_element_cpp (World* world, App* app) {
     assert(index_lit);
     u64 index = index_lit->value().get_u64();
 
-    //lea->ptr()->dump();
-    //world->dump();
-
     auto global_bitcast = lea->ptr()->isa<Bitcast>();
     assert(global_bitcast);
 

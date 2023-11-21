@@ -3,6 +3,10 @@ struct PassManager {
     release: fn (Buffer) -> ()
 }
 
+/* Utility functoins
+TODO: these should probably be namespaced to not interfere with anything else?
+*/
+
 fn @round_down(n: i32, d: i32) -> i32 {
   (n / d) * d
 }
@@ -24,15 +28,28 @@ fn @vector_loop(body: fn(i32) -> ()) = @|n: i32| {
     }
 };
 
+fn @parallel_loop(body: fn(i32) -> ()) = @|n: i32| {
+    if true {
+        let num_threads = 4;
+        for i in parallel(num_threads, 0, n) {
+            @body(i)
+        }
+    } else {
+        for i in range(0, n) {
+            @body(i)
+        }
+    }
+};
+
+fn @atomic_add (p: &mut f32, d : f32) {
+    atomic[f32](11, p, d, 7, "");
+}
+
 struct Tensor[T] {
     buffer : Buffer,
     num_dims : i32,
     size_fn: fn(i32) -> i64,
     access_fn: fn(&[i64]) -> &mut T
-}
-
-fn @atomic_add (p: &mut f32, d : f32) {
-    atomic[f32](11, p, d, 7, "");
 }
 
 /*#[import(cc = "C", name = "get_buffer")] fn get_buffer_internal(_min_size : i64) -> &mut [i8];
@@ -47,6 +64,18 @@ fn @get_buffer_managed(min_size: i64) = Buffer {
 
 fn @release_buffer_managed(buffer : Buffer) {
     release_buffer_internal(buffer.data)
+}*/
+
+/*#[import(cc = "C", name = "load_matrix_dynamic")] fn load_matrix_dynamic(_tensor: &mut[f32], _file_name: &[u8], _matrix_name: &[u8]) -> ();
+#[import(cc = "plugin", name = "static_alloca")] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
+
+fn load_matrix_into(tensor: Tensor[f32], file_name: &[u8], matrix_name: &[u8]) -> (fn () -> ()) {
+    fn load_matrix() {
+        let data = bitcast[&mut[f32]](tensor.buffer.data);
+        load_matrix_dynamic(data, file_name, matrix_name);
+    }
+
+    load_matrix
 }*/
 
 #[import(cc = "plugin", name = "load_matrix_into")] fn load_matrix_into(_tensor: Tensor[f32], _file_name: &[u8], _matrix_name: &[u8]) -> (fn () -> ());
@@ -88,98 +117,107 @@ fn release_tensor[T] (manager: PassManager, mat : Tensor[T]) -> () {
     manager.release(mat.buffer);
 }
 
-fn multi_loop_buffered (body: fn(&[i64]) -> (), current_dim: i32, num_dims: i32, n: &[i64], index_buffer: &mut [i64]) -> () {
-    if current_dim < num_dims {
-        for i in range(0, n(current_dim) as i32) {
-            index_buffer(current_dim) = i as i64;
-            multi_loop_buffered(body, current_dim + 1, num_dims, n, index_buffer);
-        }
-    } else {
-        @body(index_buffer);
+
+enum LoopMode {
+    Sequential,
+    Vectorized,
+    Parallel
+}
+
+struct LoopInstance {
+    manager : PassManager,
+    num_dims : i32,
+    index : &mut[i64],
+    min : &[i64],
+    max : &[i64],
+    mode : &[LoopMode]
+}
+
+#[import (cc = "plugin", name = "build_static_array")] fn static_array [T] (_element: T, _size: i64) -> &[T];
+#[import (cc = "plugin", name = "static_array_set_element", depends = static_array[T])] fn static_array_set_element [T] (_element: &T, _value: T) -> ();
+
+fn @make_loopinstance(manager : PassManager, num_dims : i32, n : &[i64]) -> LoopInstance {
+    let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
+    
+    LoopInstance {
+        manager = manager,
+        num_dims = num_dims,
+        index = bitcast[&mut[i64]](index_buffer.data),
+        min = static_array(0 as i64, num_dims as i64),
+        max = n,
+        mode = static_array(LoopMode::Sequential, num_dims as i64)
     }
 }
 
-fn @multi_loop_vector (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
-    let vector_width = 4;
-    let mut index_buffer_buffer : [Buffer * 4];
+fn @multi_loop (body: fn(LoopInstance) -> ()) = @|manager: PassManager, num_dims: i32, n: &[i64]| {
+    let instance = make_loopinstance(manager, num_dims, n);
 
-    for i in range(0, vector_width) {
-        let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
-        index_buffer_buffer(i) = index_buffer;
-    }
-
-    for i in vector_loop(n(0) as i32) {
-        let index_buffer = bitcast[&mut[i64]](index_buffer_buffer(i % vector_width).data);
-        index_buffer(0) = i as i64;
-        multi_loop_buffered(body, 1, num_dims, n, index_buffer);
-    }
-
-    for i in range(0, vector_width) {
-        let index_buffer = index_buffer_buffer(i);
-        manager.release(index_buffer);
-    }
+    @multi_loop_instanced(body, 0, instance);
 };
 
-fn @multi_loop_parallel (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
-    let threads = n(0);
-    //let mut index_buffer_buffer : [Buffer * threads];
-    let index_buffer_buffer_buffer = manager.alloc(sizeof[Buffer]() * threads);
-    let mut index_buffer_buffer = bitcast[&mut[Buffer]](index_buffer_buffer_buffer.data);
+fn @multi_loop_vector (body: fn(LoopInstance) -> ()) = @|manager: PassManager, num_dims: i32, n: &[i64]| {
+    let instance = make_loopinstance(manager, num_dims, n);
 
-    for i in range(0, threads as i32) {
-        let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
-        index_buffer_buffer(i) = index_buffer;
-    }
+    //static_array_set_element(&instance.mode(0), LoopMode::Vectorized);
 
-    for i in parallel_loop(threads as i32) {
-        let index_buffer = bitcast[&mut[i64]](index_buffer_buffer(i).data);
-        index_buffer(0) = i as i64;
-        multi_loop_buffered(body, 1, num_dims, n, index_buffer);
-    }
-
-    for i in range(0, threads as i32) {
-        let index_buffer = index_buffer_buffer(i);
-        manager.release(index_buffer);
-    }
-
-    manager.release(index_buffer_buffer_buffer);
+    @multi_loop_instanced(body, 0, instance);
 };
 
-fn @multi_loop (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
-    let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
+fn multi_loop_instanced (body: fn(LoopInstance) -> (), current_dim: i32, instance : LoopInstance) -> () {
+    if current_dim < instance.num_dims {
+        let mode = instance.mode(current_dim);
 
-    multi_loop_buffered(body, 0, num_dims, n, bitcast[&mut[i64]](index_buffer.data));
+        match mode {
+            LoopMode::Sequential => {
+                for i in range(instance.min(current_dim) as i32, instance.max(current_dim) as i32) {
+                    instance.index(current_dim) = i as i64;
+                    multi_loop_instanced(body, current_dim + 1, instance);
+                }
+            },
+            LoopMode::Vectorized => {
+                let vector_width = 4;
+                let mut vector_buffers : [Buffer * 4];
 
-    manager.release(index_buffer);
-};
+                for i in range(0, vector_width) {
+                    let index_buffer_alloc = instance.manager.alloc(sizeof[i64]() * instance.num_dims as i64);
 
-fn @vector_loop_sequential(body: fn (i32) -> ()) = @|index : &[i64]| {
-    let vector_width = 4;
-    let lane = index(0) as i32 % vector_width;
-    for i in unroll(0, vector_width) {
-        if i == lane {
-            @body(i);
+                    let index_buffer = bitcast[&mut[i64]](index_buffer_alloc.data);
+                    for j in range(0, current_dim) {
+                        index_buffer(j) = instance.index(j);
+                    }
+
+                    vector_buffers(i) = index_buffer_alloc;
+                }
+
+                for i in vector_loop((instance.max(current_dim) - instance.min(current_dim)) as i32) {
+                    let index_buffer_alloc = vector_buffers(i % vector_width);
+                    let index_buffer = bitcast[&mut[i64]](index_buffer_alloc.data);
+
+                    let current_instance = LoopInstance {
+                        manager = instance.manager,
+                        num_dims = instance.num_dims,
+
+                        index = index_buffer,
+                        max = instance.max,
+                        min = instance.min,
+                        mode = instance.mode
+                    };
+
+                    current_instance.index(current_dim) = i as i64 + instance.min(current_dim);
+
+                    multi_loop_instanced(body, current_dim + 1, current_instance);
+                }
+            },
+
+            _ =>
+            @body(instance)
         }
+    } else {
+        @body(instance);
     }
-};
 
-fn @rv_sequential(body: fn (i32) -> ()) = @|| {
-    let vector_width = 4;
-    let lane = rv_lane_id();
-    for i in unroll(0, vector_width) {
-        if i == lane {
-            @body(i);
-        }
-    }
-};
 
-//fn @multi_loop_vector (body: fn(&[i64]) -> ()) = @|manager: PassManager, num_dims: i32, n : &[i64]| {
-//    let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
-//
-//    multi_loop_buffered(body, 0, num_dims, n, bitcast[&mut[i64]](index_buffer.data));
-//
-//    manager.release(index_buffer);
-//};
+}
 
 fn sequential (body: fn(PassManager) -> ()) = @|| {
     let manager = PassManager {
