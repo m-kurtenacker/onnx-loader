@@ -1,4 +1,4 @@
-from type_table import *
+from .type_table import *
 
 class ThorinDef:
     def __bool__(self):
@@ -111,12 +111,14 @@ class ThorinParameter(ThorinDef):
 
 
 class ThorinContinuation(ThorinDef):
-    def __init__(self, type, external="", intrinsic="", app=None, thorin=None):
+    def __init__(self, type, external="", internal="", intrinsic="", app=None, filter=None, thorin=None):
         super().__init__()
         self.type = type
         self.external = external
+        self.internal = internal
         self.intrinsic = intrinsic
         self.app = app
+        self.filter = filter
         self.thorin = thorin
 
         self.parameters = []
@@ -150,10 +152,16 @@ class ThorinContinuation(ThorinDef):
 
         if self.external != "":
             my_def.update({"external": self.external})
+        if self.internal != "":
+            my_def.update({"internal": self.internal})
         if self.intrinsic != "":
             my_def.update({"intrinsic": self.intrinsic})
 
         def_table.append(my_def)
+
+        my_filter = None
+        if self.filter is not None:
+            my_filter = self.filter.get(module)
 
         if self.app:
             target, args = self.app
@@ -162,6 +170,8 @@ class ThorinContinuation(ThorinDef):
             for arg in args:
                 compiled_args.append(arg.get(module))
             app_def = {"type": "continuation", "name": name, "app": {"target": compiled_target, "args": compiled_args}}
+            if my_filter:
+                app_def.update({"filter": my_filter})
             def_table.append(app_def)
 
         return name
@@ -454,7 +464,7 @@ class ThorinDefiniteArray(ThorinDef):
         save_index = len(def_table)
         name = "_definitearray_" + str(save_index)
 
-        def_table.append({"type": "definitearray", "name": name, "elem_type": elem_type, "args": args})
+        def_table.append({"type": "def_array", "name": name, "elem_type": elem_type, "args": args})
         return name
 
 
@@ -472,7 +482,7 @@ class ThorinIndefiniteArray(ThorinDef):
         save_index = len(def_table)
         name = "_indefinitearray_" + str(save_index)
 
-        def_table.append({"type": "indefinitearray", "name": name, "elem_type": elem_type, "dim": dim})
+        def_table.append({"type": "indef_array", "name": name, "elem_type": elem_type, "dim": dim})
         return name
 
 
@@ -492,7 +502,7 @@ class ThorinGlobal(ThorinDef):
 
         my_def = {"type": "global", "name": name, "mutable": self.mutable, "init": init}
 
-        if external != "":
+        if self.external is not None:
             my_def.update({"external": self.external})
 
         def_table.append(my_def)
@@ -800,6 +810,18 @@ def thorinBranchFn(mem_param, cond_param, branch_true=None, branch_false=None):
     branch_int = ThorinContinuation(branch_type, intrinsic="branch")
 
     return (branch_int, mem_param, cond_param, branch_true_block, branch_false_block)
+
+def thorinString(content):
+    strlen = len(content)
+    bytestr = list(content.encode("utf-8")) + [0]
+
+    u8type = ThorinPrimType("pu8", 1)
+
+    def_array = ThorinDefiniteArray(u8type, map(lambda x: ThorinConstant(u8type, x), bytestr))
+    global_array = ThorinGlobal(def_array)
+    bitcast_array = ThorinBitcast(global_array, ThorinPointerType(ThorinIndefiniteArrayType(u8type)))
+
+    return bitcast_array
 
 def thorinRangeFn(mem_param, lower, upper, step, body_fn, return_fn):
     int_type = ThorinPrimType("qs32", 1)

@@ -22,7 +22,7 @@ class ThorinDefiniteArrayType(ThorinType):
         save_index = len(type_table)
         name = "_def_array_" + str(save_index)
 
-        type_table.append({"type": "def_array", "name": name, "lenght": self.length, "args": [target_type]})
+        type_table.append({"type": "def_array", "name": name, "length": self.length, "args": [target_type]})
         return name
 
 
@@ -130,16 +130,16 @@ class ThorinStructType(ThorinType):
         self.cache = name
 
         arg_names = []
-        for name, arg in formated_args:
-            arg_names.append(name)
+        for arg_name, arg in self.formated_args:
+            arg_names.append(arg_name)
 
         type_table.append({"type": "struct", "name": name, "struct_name": self.struct_name, "arg_names": arg_names})
 
         args = []
-        for name, arg in formated_args:
+        for arg_name, arg in self.formated_args:
             args.append(arg.get(module))
 
-        type_table.append({"type": "struct", "name": name, "arg_names": arg_names, "args": args})
+        type_table.append({"type": "struct", "name": name, "struct_name": self.struct_name, "arg_names": arg_names, "args": args})
         return name
 
 
@@ -158,13 +158,13 @@ class ThorinVariantType(ThorinType):
         self.cache = name
 
         arg_names = []
-        for name, arg in formated_args:
+        for name, arg in self.formated_args:
             arg_names.append(name)
 
         type_table.append({"type": "variant", "name": name, "variant_name": self.variant_name, "arg_names": arg_names})
 
         args = []
-        for name, arg in formated_args:
+        for name, arg in self.formated_args:
             args.append(arg.get(module))
 
         type_table.append({"type": "variant", "name": name, "arg_names": arg_names, "args": args})
@@ -189,7 +189,7 @@ class ThorinTupleType(ThorinType):
 
 
 class ThorinPrimType(ThorinType):
-    def __init__(self, tag, length):
+    def __init__(self, tag, length=1):
         super().__init__()
         self.tag = tag
         self.length = length
@@ -207,7 +207,7 @@ class ThorinPrimType(ThorinType):
 
 
 class ThorinPointerType(ThorinType):
-    def __init__(self, pointee, length, device=None, addrspace=None):
+    def __init__(self, pointee, length=1, device=None, addrspace=None):
         super().__init__()
         self.pointee = pointee
         self.length = length

@@ -1,25 +1,26 @@
-fn @execute_network(manager : PassManager, target : i32, matrixA_Tensor : Tensor[f32], matrixB_Tensor : Tensor[f32], biasA_Tensor : Tensor[f32], biasB_Tensor : Tensor[f32], image_Tensor : Tensor[f32]) -> f32 {
+#[intern]
+fn execute_network(manager : PassManager, target : i32, matrixA_Tensor : Tensor[f32], matrixB_Tensor : Tensor[f32], biasA_Tensor : Tensor[f32], biasB_Tensor : Tensor[f32], image_Tensor : Tensor[f32]) -> f32 {
     let flat_Tensor = matrix_flatten[f32](manager, image_Tensor);
     let mult_result = matrix_multiply(manager, matrixA_Tensor, flat_Tensor);
-    release_tensor(manager, flat_Tensor);
+    //release_tensor(manager, flat_Tensor);
     let add_result = matrix_add(manager, mult_result, biasA_Tensor);
-    release_tensor(manager, mult_result);
+    //release_tensor(manager, mult_result);
     let relu_result = matrix_relu(manager, add_result);
-    release_tensor(manager, add_result);
+    //release_tensor(manager, add_result);
     let mult_result_B = matrix_multiply(manager, matrixB_Tensor, relu_result);
-    release_tensor(manager, relu_result);
+    //release_tensor(manager, relu_result);
     let add_result_B = matrix_add(manager, mult_result_B, biasB_Tensor);
-    release_tensor(manager, mult_result_B);
+    //release_tensor(manager, mult_result_B);
     let soft_result = matrix_softmax(manager, add_result_B);
-    release_tensor(manager, add_result_B);
+    //release_tensor(manager, add_result_B);
     let a = matrix_sparsecrossentropy(manager, soft_result, target);
-    release_tensor(manager, soft_result);
+    //release_tensor(manager, soft_result);
 
     a
 }
 
-#[intern]
-fn @run_network(image : &[&[f32]], label : i32) -> f32 {
+//#[intern]
+/*fn @run_network(image : &[&[f32]], label : i32) -> f32 {
     let mut error : f32;
     for manager in sequential() {
         let matrixA_Tensor = @alloc_tensor[f32](manager, 2, @|n| { [784, 128](n) as i64 });
@@ -42,8 +43,9 @@ fn @run_network(image : &[&[f32]], label : i32) -> f32 {
             }
         }
 
-        error = execute_network(manager, label, matrixA_Tensor, matrixB_Tensor, biasA_Tensor, biasB_Tensor, image_Tensor);
+        //error = execute_network(manager, label, matrixA_Tensor, matrixB_Tensor, biasA_Tensor, biasB_Tensor, image_Tensor);
+        error = 0;
     }
 
     error
-}
+}*/

@@ -66,9 +66,10 @@ fn @release_buffer_managed(buffer : Buffer) {
     release_buffer_internal(buffer.data)
 }*/
 
-/*#[import(cc = "C", name = "load_matrix_dynamic")] fn load_matrix_dynamic(_tensor: &mut[f32], _file_name: &[u8], _matrix_name: &[u8]) -> ();
+#[import(cc = "C", name = "load_matrix_dynamic")] fn load_matrix_dynamic(_tensor: &mut[f32], _file_name: &[u8], _matrix_name: &[u8]) -> ();
 #[import(cc = "plugin", name = "static_alloca")] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
 
+#[intern]
 fn load_matrix_into(tensor: Tensor[f32], file_name: &[u8], matrix_name: &[u8]) -> (fn () -> ()) {
     fn load_matrix() {
         let data = bitcast[&mut[f32]](tensor.buffer.data);
@@ -76,10 +77,10 @@ fn load_matrix_into(tensor: Tensor[f32], file_name: &[u8], matrix_name: &[u8]) -
     }
 
     load_matrix
-}*/
+}
 
-#[import(cc = "plugin", name = "load_matrix_into")] fn load_matrix_into(_tensor: Tensor[f32], _file_name: &[u8], _matrix_name: &[u8]) -> (fn () -> ());
-#[import(cc = "plugin", name = "static_alloca", depends = load_matrix_into)] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
+//#[import(cc = "plugin", name = "load_matrix_into")] fn load_matrix_into(_tensor: Tensor[f32], _file_name: &[u8], _matrix_name: &[u8]) -> (fn () -> ());
+//#[import(cc = "plugin", name = "static_alloca", depends = load_matrix_into)] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
 #[import(cc = "plugin", name = "static_release")] fn static_release(&mut [i8]) -> (fn() -> ());
 
 fn @get_buffer_managed(min_size: i64) = Buffer {
@@ -90,7 +91,7 @@ fn @get_buffer_managed(min_size: i64) = Buffer {
 
 fn @release_buffer_managed(_buffer : Buffer) { }
 
-fn alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) -> Tensor[T] {
+fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) -> Tensor[T] {
     let mut size = 1 as i64;
     for i in unroll (0, num_dims) {
         size *= size_fn(i);
@@ -116,7 +117,6 @@ fn alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i
 fn release_tensor[T] (manager: PassManager, mat : Tensor[T]) -> () {
     manager.release(mat.buffer);
 }
-
 
 enum LoopMode {
     Sequential,
@@ -219,6 +219,7 @@ fn multi_loop_instanced (body: fn(LoopInstance) -> (), current_dim: i32, instanc
 
 }
 
+#[intern]
 fn sequential (body: fn(PassManager) -> ()) = @|| {
     let manager = PassManager {
         alloc = get_buffer_managed,
@@ -226,3 +227,6 @@ fn sequential (body: fn(PassManager) -> ()) = @|| {
     };
     body(manager);
 };
+
+#[intern] fn @alloc_tensor_f32 (manager: PassManager, num_dims: i32, size_fn : fn(i32) -> i64) = @alloc_tensor[f32](manager, num_dims, size_fn);
+//#[intern] fn release_tensor_f32 (manager: PassManager, mat : Tensor[f32]) = release_tensor[f32](manager, mat);

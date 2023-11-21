@@ -3,25 +3,31 @@ import ctypes
 import os
 import subprocess
 
-from type_table import *
-from irbuilder import *
+from .type_table import *
+from .irbuilder import *
 
 class Thorin:
-    def __init__(self, module_name):
+    def __init__(self, module_name, module=False):
         self.module = {"defs": [], "type_table": [], "module": module_name}
         self.module_name = module_name
         self.compiled = False
+        self.module_target = module
+        self.imported_definitions = {}
 
     #TODO: Use the thorin world for caching, don't cache information about the world inside defs.
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.compile_module()
+        if self.module_target:
+            self.compile_module()
+        else:
+            with open(self.module_name + ".thorin.json", "w+") as f:
+                json.dump(self.module, f, indent=2)
 
     def __del__(self):
         keep = os.environ.get("KEEP_BUILD_FILES")
-        if (keep is None or keep == "0") and self.compiled:
+        if (keep is None or keep == "0") and self.module_target and self.compiled:
             os.remove(self.module_name + ".thorin.json")
             os.remove(self.module_name + ".ll")
             os.remove(self.module_name + ".so")
@@ -49,6 +55,24 @@ class Thorin:
         libc = ctypes.CDLL(self.module_name + ".so")
 
         return libc[function_name](*args)
+
+    def include(self, module_file):
+        if module_file.endswith(".art"):
+            subprocess.run(["artic", "--emit-json", "-o", module_file[:-4], module_file])
+            module_file = module_file[:-4] + ".thorin.json"
+            #TODO: Mark these files for deletion if not required.
+
+        with open(module_file) as f:
+            extern_module = json.load(f)
+
+        for definition in extern_module["defs"]:
+            if "internal" in definition:
+                imported_def = ThorinContinuation(ThorinFnType([]), internal=definition["internal"]) # XXX: These continuations can only be used in a specific order with the imported files!
+                self.add_def(imported_def)
+                self.imported_definitions.update({definition["internal"]: imported_def})
+
+    def find_imported_def(self, function_name):
+        return self.imported_definitions[function_name]
 
     def __getattr__(self, function_name):
         return lambda *args : self.call_function(function_name, *args)

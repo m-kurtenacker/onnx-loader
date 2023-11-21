@@ -36,16 +36,20 @@ main.thorin.json: main.art read.art utils.art
 		--log-level ${LOG_LEVEL} \
 		-o main
 
-network.thorin.json: network.art sequential.art mat.art
+network-tools.thorin.json: sequential.art mat.art network.art
 	artic \
 		${RUNTIME} \
 		$^ \
 		--emit-json \
 		--log-level ${LOG_LEVEL} \
-		-o network
+		-o network-tools
 
-network-compiled.thorin.json: network.thorin.json plugin/build/loader.so
+network.thorin.json: network.py network-tools.thorin.json
+	python network.py
+
+network-compiled.thorin.json: network-tools.thorin.json network.thorin.json plugin/build/loader.so
 	anyopt \
+		network-tools.thorin.json \
 		network.thorin.json \
 		--pass cleanup \
 		--pass lower2cff \
