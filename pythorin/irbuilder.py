@@ -11,42 +11,42 @@ class ThorinDef:
         return self.cache
     def __add__(self, other):
         if isinstance(other, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             other = ThorinConstant(int_type, other)
         return ThorinArithOp("add", [self, other])
     def __sub__(self, other):
         if isinstance(other, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             other = ThorinConstant(int_type, other)
         return ThorinArithOp("sub", [self, other])
     def __mul__(self, other):
         if isinstance(other, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             other = ThorinConstant(int_type, other)
         return ThorinArithOp("mul", [self, other])
     def __truediv__(self, other):
         if isinstance(other, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             other = ThorinConstant(int_type, other)
         return ThorinArithOp("div", [self, other])
     def __lt__(self, other):
         if isinstance(other, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             other = ThorinConstant(int_type, other)
         return ThorinCmp("lt", [self, other])
     def __le__(self, other):
         if isinstance(other, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             other = ThorinConstant(int_type, other)
         return ThorinCmp("le", [self, other])
     def __gt__(self, other):
         if isinstance(other, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             other = ThorinConstant(int_type, other)
         return ThorinCmp("gt", [self, other])
     def __ge__(self, other):
         if isinstance(other, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             other = ThorinConstant(int_type, other)
         return ThorinCmp("ge", [self, other])
 
@@ -161,7 +161,16 @@ class ThorinContinuation(ThorinDef):
 
         my_filter = None
         if self.filter is not None:
-            my_filter = self.filter.get(module)
+            if self.filter == True:
+                bool_type = ThorinPrimType("bool")
+                true_const = ThorinConstant(bool_type, True)
+                my_filter = ThorinFilter([true_const for i in range(0, len(self.parameters))]).get(module)
+            elif self.filter == False:
+                bool_type = ThorinPrimType("bool")
+                false_const = ThorinConstant(bool_type, False)
+                my_filter = ThorinFilter([false_const for i in range(0, len(self.parameters))]).get(module)
+            else:
+                my_filter = self.filter.get(module)
 
         if self.app:
             target, args = self.app
@@ -290,7 +299,7 @@ class ThorinExtract(ThorinDef):
         if isinstance(index, ThorinDef):
             self.index = index
         elif isinstance(index, int):
-            unsigned_type = ThorinPrimType("qu32", 1)
+            unsigned_type = ThorinPrimType("qu32")
             self.index = ThorinConstant(unsigned_type, index)
         else:
             raise Exception("Not supported")
@@ -396,7 +405,7 @@ class ThorinStore(ThorinDef):
         if isinstance(value, ThorinDef):
             self.value = value
         elif isinstance(value, int):
-            int_type = ThorinPrimType("qs32", 1)
+            int_type = ThorinPrimType("qs32")
             self.value = ThorinConstant(int_type, value)
         else:
             raise Exception("Not supported")
@@ -786,7 +795,7 @@ def thorinBranch(target, mem_param, cond_param, branch_true=None, branch_false=N
     if branch_false is None:
         branch_false = ThorinContinuation(mem_fn_type)
 
-    bool_type = ThorinPrimType("bool", 1)
+    bool_type = ThorinPrimType("bool")
     branch_type = ThorinFnType([mem_type, bool_type, mem_fn_type, mem_fn_type])
     branch_int = ThorinContinuation(branch_type, intrinsic="branch")
     target(branch_int, mem_param, cond_param, branch_true, branch_false)
@@ -805,7 +814,7 @@ def thorinBranchFn(mem_param, cond_param, branch_true=None, branch_false=None):
         if branch_false is not None:
             branch_false(branch_false_block, branch_false_mem)
 
-    bool_type = ThorinPrimType("bool", 1)
+    bool_type = ThorinPrimType("bool")
     branch_type = ThorinFnType([mem_type, bool_type, mem_fn_type, mem_fn_type])
     branch_int = ThorinContinuation(branch_type, intrinsic="branch")
 
@@ -815,7 +824,7 @@ def thorinString(content):
     strlen = len(content)
     bytestr = list(content.encode("utf-8")) + [0]
 
-    u8type = ThorinPrimType("pu8", 1)
+    u8type = ThorinPrimType("pu8")
 
     def_array = ThorinDefiniteArray(u8type, map(lambda x: ThorinConstant(u8type, x), bytestr))
     global_array = ThorinGlobal(def_array)
@@ -824,7 +833,7 @@ def thorinString(content):
     return bitcast_array
 
 def thorinRangeFn(mem_param, lower, upper, step, body_fn, return_fn):
-    int_type = ThorinPrimType("qs32", 1)
+    int_type = ThorinPrimType("qs32")
     mem_type = ThorinMemType()
 
     ret_fn_type = ThorinFnType([mem_type, int_type])

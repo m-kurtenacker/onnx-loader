@@ -1,5 +1,4 @@
-#[intern]
-fn @run_network(image : &[&[f32]], label : i32) -> f32;
+#[intern] fn @run_network(_image : &[&[f32]], _label : i32) -> f32;
 
 #[export]
 fn main () -> i32 {
@@ -11,6 +10,7 @@ fn main () -> i32 {
     print_string("Starting test\n");
 
     let mut sum = 0 as f32;
+    let mut run_test = 0 as i64;
     for benchmark_cpu() {
         for i in range(0, num_tests) {
             let image_buffer = data_test(i).image_buffer;
@@ -18,19 +18,20 @@ fn main () -> i32 {
 
             let error = run_network(image, data_test(i).label);
             sum += error;
+            run_test += 1;
             //print_i32(i);
             //print_string("\n");
         }
     }
 
-    let final_result = sum / (num_tests as f32);
+    let final_result = sum / (run_test as f32);
 
     print_f32(final_result);
     print_string("\n");
 
-    if (final_result < 3.129) {
+    if (final_result < 0.11) {
         print_string("Result better then expected.\n");
-    } else if (final_result > 3.13) {
+    } else if (final_result > 0.12) {
         print_string("Result worse then expected.\n");
     }
 

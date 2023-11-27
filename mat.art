@@ -48,6 +48,9 @@ fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32])
     output
 }
 
+#[intern]
+fn @matrix_multiply_f32 (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) = @matrix_multiply(manager, mat, input);
+
 fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> Tensor[f32] {
     let output = @alloc_tensor[f32](manager, matA.num_dims, matA.size_fn);
 
@@ -70,6 +73,9 @@ fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> T
     output
 }
 
+#[intern]
+fn @matrix_add_f32 (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) = @matrix_add(manager, matA, matB);
+
 fn @matrix_relu (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
     let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
 
@@ -89,6 +95,9 @@ fn @matrix_relu (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
 
     output
 }
+
+#[intern]
+fn @matrix_relu_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_relu(manager, mat);
 
 fn @matrix_flatten[T] (manager: PassManager, mat: Tensor[T]) -> Tensor[T] {
     let mut size = 1 as i64;
@@ -124,6 +133,9 @@ fn @matrix_flatten[T] (manager: PassManager, mat: Tensor[T]) -> Tensor[T] {
     }
 }
 
+#[intern]
+fn @matrix_flatten_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_flatten[f32](manager, mat);
+
 fn @matrix_softmax (manager: PassManager, mat: Tensor[f32]) {
     let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
 
@@ -152,6 +164,9 @@ fn @matrix_softmax (manager: PassManager, mat: Tensor[f32]) {
     output
 }
 
+#[intern]
+fn @matrix_softmax_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_softmax(manager, mat);
+
 fn @matrix_sparsecrossentropy (manager: PassManager, mat: Tensor[f32], expected: i32) -> f32 {
     let index_buffer_buffer = manager.alloc(sizeof[i64]() * 1 as i64);
     let index_buffer = bitcast[&mut[i64]](index_buffer_buffer.data);
@@ -164,3 +179,6 @@ fn @matrix_sparsecrossentropy (manager: PassManager, mat: Tensor[f32], expected:
 
     r
 }
+
+#[intern]
+fn @matrix_sparsecrossentropy_f32 (manager: PassManager, mat: Tensor[f32], expected: i32) = @matrix_sparsecrossentropy(manager, mat, expected);

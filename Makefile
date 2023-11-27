@@ -2,10 +2,11 @@
 all: a.out
 
 clean:
-	rm -f *.ll *.thorin.json a.out b.out test minimized
+	rm -f *.ll *.thorin.json a.out
 
 clean-all: clean
 	@make -C plugin/build clean
+	rm -rf pythorin/__pycache__
 
 LOG_LEVEL=info
 
@@ -36,7 +37,7 @@ main.thorin.json: main.art read.art utils.art
 		--log-level ${LOG_LEVEL} \
 		-o main
 
-network-tools.thorin.json: sequential.art mat.art network.art
+network-tools.thorin.json: sequential.art mat.art
 	artic \
 		${RUNTIME} \
 		$^ \
@@ -47,10 +48,18 @@ network-tools.thorin.json: sequential.art mat.art network.art
 network.thorin.json: network.py network-tools.thorin.json
 	python network.py
 
-network-compiled.thorin.json: network-tools.thorin.json network.thorin.json plugin/build/loader.so
+network-combined.thorin.json: network-tools.thorin.json network.thorin.json
 	anyopt \
-		network-tools.thorin.json \
-		network.thorin.json \
+		$^ \
+		--pass cleanup \
+		--keep-intern run_network \
+		--emit-json \
+		--log-level ${LOG_LEVEL} \
+		-o network-combined
+
+network-compiled.thorin.json: network-combined.thorin.json plugin/build/loader.so
+	anyopt \
+		network-combined.thorin.json \
 		--pass cleanup \
 		--pass lower2cff \
 		--pass plugin_execute \
@@ -78,9 +87,9 @@ combined.ll: main.thorin.json network-compiled.thorin.json plugin/build/loader.s
 		--log-level ${LOG_LEVEL} \
 		-o combined
 
-a.out: combined.ll allocator.cpp read.cpp plugin/build/loader_runtime.so
+a.out: combined.ll utils/allocator.cpp utils/read.cpp plugin/build/loader_runtime.so
 	clang++ -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
 
-#a.out: combined.ll allocator.cpp read.cpp
+#a.out: combined.ll utils/allocator.cpp utils/read.cpp
 #	clang++ -o a.out -O3 -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^
 #	#clang++ -Og -g -L${THORIN_RUNTIME_PATH}/../build/lib -lruntime -lm $^

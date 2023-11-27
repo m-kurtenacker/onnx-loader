@@ -56,9 +56,17 @@ class ThorinBottomType(ThorinType):
 
 
 class ThorinFnType(ThorinType):
-    def __init__(self, args):
+    def __init__(self, args, return_type=None):
         super().__init__()
         self.args = args
+        if return_type is not None:
+            mem_type = ThorinMemType()
+            if return_type == True:
+                self.args.append(ThorinFnType([mem_type]))
+            elif return_type == False:
+                pass
+            else:
+                self.args.append(ThorinFnType([mem_type, return_type]))
 
     def compile(self, module):
         args = []

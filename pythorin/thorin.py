@@ -68,7 +68,6 @@ class Thorin:
         for definition in extern_module["defs"]:
             if "internal" in definition:
                 imported_def = ThorinContinuation(ThorinFnType([]), internal=definition["internal"]) # XXX: These continuations can only be used in a specific order with the imported files!
-                self.add_def(imported_def)
                 self.imported_definitions.update({definition["internal"]: imported_def})
 
     def find_imported_def(self, function_name):

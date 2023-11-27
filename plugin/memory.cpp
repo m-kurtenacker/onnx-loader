@@ -54,13 +54,16 @@ void * static_free (World* world, App* app) {
 }
 
 void * build_static_array_cpp (World* world, App* app) {
-    std::cerr << "build_static_array\n";
-    app->dump();
+    //std::cerr << "build_static_array\n";
+    //app->dump();
     const Def* element = app->arg(1);
     const Def* size = app->arg(2);
 
     auto size_lit = size->isa<PrimLit>();
-    assert(size_lit && "Static arrays need to have a known size at this point.");
+    //assert(size_lit && "Static arrays need to have a known size at this point.");
+    if (!size_lit) {
+        throw std::runtime_error("Static arrays need to have a known size at this point.");
+    }
 
     u64 array_size = size_lit->value().get_u64();
 
@@ -81,8 +84,8 @@ void * build_static_array_cpp (World* world, App* app) {
 }
 
 void * static_array_set_element_cpp (World* world, App* app) {
-    std::cerr << "static_array_set_element\n";
-    app->dump();
+    //std::cerr << "static_array_set_element\n";
+    //app->dump();
     const Def* element = app->arg(1);
     const Def* value = app->arg(2);
 
