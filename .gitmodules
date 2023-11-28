@@ -2,5 +2,5 @@
 	path = mnist-example
 	url = ssh://git@galadriel.kurdi.dedyn.io:2222/DFKI/mnist-example.git
 [submodule "onnx"]
-	path = onnx
+	path = onnx_c
 	url = https://github.com/onnx/onnx

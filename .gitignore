@@ -2,3 +2,5 @@ plugin/build
 *.thorin.json
 *.ll
 a.out
+venv
+__pycache__/

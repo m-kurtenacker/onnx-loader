@@ -5,8 +5,10 @@ clean:
 	rm -f *.ll *.thorin.json a.out
 
 clean-all: clean
-	@make -C plugin/build clean
+	rm -rf plugin/build
 	rm -rf pythorin/__pycache__
+	rm -rf onnx_c/build onnx_c/install
+	rm -rf venv
 
 LOG_LEVEL=info
 
@@ -16,17 +18,25 @@ RUNTIME=${THORIN_RUNTIME_PATH}/artic/runtime.impala \
 	${THORIN_RUNTIME_PATH}/artic/intrinsics_math.impala \
 	${THORIN_RUNTIME_PATH}/artic/intrinsics.impala
 
-.PHONY: onnx
-onnx:
-	mkdir -p onnx/build
-	cd onnx/build && \
+onnx_c/install:
+	mkdir -p onnx_c/build
+	cd onnx_c/build && \
 		cmake .. -GNinja -DCMAKE_CXX_STANDARD=17 -DCMAKE_C_STANDARD=17 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_INSTALL_PREFIX=../install && \
 		ninja install
 
-plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp
+venv:
+	python -m venv venv
+	cd onnx_c && \
+		../venv/bin/pip install -e .
+
+plugin/build: onnx_c/install
+	mkdir -p plugin/build
+	cd plugin/build && cmake .. -DONNX_DIR=`pwd`/../../onnx_c/install/lib/cmake/ONNX
+
+plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp plugin/build
 	@make -C plugin/build all
 
-plugin/build/loader_runtime.so: plugin/load_runtime.cpp
+plugin/build/loader_runtime.so: plugin/load_runtime.cpp plugin/build
 	@make -C plugin/build all
 
 main.thorin.json: main.art read.art utils.art
@@ -45,8 +55,8 @@ network-tools.thorin.json: sequential.art mat.art
 		--log-level ${LOG_LEVEL} \
 		-o network-tools
 
-network.thorin.json: network.py network-tools.thorin.json
-	python network.py
+network.thorin.json: network.py network-tools.thorin.json venv
+	./venv/bin/python network.py
 
 network-combined.thorin.json: network-tools.thorin.json network.thorin.json
 	anyopt \
