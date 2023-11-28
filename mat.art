@@ -76,6 +76,12 @@ fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> T
 #[intern]
 fn @matrix_add_f32 (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) = @matrix_add(manager, matA, matB);
 
+#[intern]
+fn @matrix_gemm_f32 (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32]) {
+    let mult_result = @matrix_multiply(manager, weight, input);
+    @matrix_add(manager, bias, mult_result)
+}
+
 fn @matrix_relu (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
     let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
 

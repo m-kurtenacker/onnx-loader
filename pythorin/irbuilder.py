@@ -836,6 +836,13 @@ def thorinRangeFn(mem_param, lower, upper, step, body_fn, return_fn):
     int_type = ThorinPrimType("qs32")
     mem_type = ThorinMemType()
 
+    if isinstance(lower, int):
+        lower = ThorinConstant(int_type, lower)
+    if isinstance(upper, int):
+        upper = ThorinConstant(int_type, upper)
+    if isinstance(step, int):
+        step = ThorinConstant(int_type, step)
+
     ret_fn_type = ThorinFnType([mem_type, int_type])
     export_fn_type = ThorinFnType([mem_type, int_type, int_type, ret_fn_type])
     mem_fn_type = ThorinFnType([mem_type])

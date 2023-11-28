@@ -1,4 +1,9 @@
-#import onnx
+import onnx
+
+ONNX_MODEL = "mnist-example/mnist.onnx"
+
+model = onnx.load(ONNX_MODEL)
+graph = model.graph
 
 from pythorin import *
 
@@ -47,7 +52,7 @@ def alloc_tensor(entry_mem, passmanager, finish_cont, dimensions):
 
 
 def alloc_and_load_tensor(entry_mem, passmanager, finish_cont, dimensions, matrix_name):
-    model_name = thorinString("mnist-example/mnist.onnx")
+    model_name = thorinString(ONNX_MODEL)
     matrix_name = thorinString(matrix_name)
 
     with ThorinContinuation(tensor_return_type) as (alloc_continue, alloc_mem, tensor):
@@ -63,66 +68,104 @@ def alloc_and_load_tensor(entry_mem, passmanager, finish_cont, dimensions, matri
 
 with Thorin("network") as network:
     network.include("network-tools.thorin.json")
-    #network.include("mat.thorin.json")
 
     sequential = network.find_imported_def("sequential")
-    sequential.type = ThorinFnType([mem_type, body_type], ThorinFnType([mem_type], True))
-
     alloc_tensor_thorin = network.find_imported_def("alloc_tensor_f32")
-    alloc_tensor_thorin.type = ThorinFnType([mem_type, passmanager_type, i32_type, size_fn_type], tensor_type)
-
     load_matrix = network.find_imported_def("load_matrix_into")
-    load_matrix.type = ThorinFnType([mem_type, tensor_type, string_type, string_type], ThorinFnType([mem_type], True))
-    
     mat_softmax = network.find_imported_def("matrix_softmax_f32")
-    mat_softmax.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
     mat_sparsecrossentropy = network.find_imported_def("matrix_sparsecrossentropy_f32")
-    mat_sparsecrossentropy.type = ThorinFnType([mem_type, passmanager_type, tensor_type, i32_type], f32_type)
     mat_flatten = network.find_imported_def("matrix_flatten_f32")
-    mat_flatten.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
     mat_mul = network.find_imported_def("matrix_multiply_f32")
-    mat_mul.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
     mat_add = network.find_imported_def("matrix_add_f32")
-    mat_add.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
     mat_relu = network.find_imported_def("matrix_relu_f32")
-    mat_relu.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    mat_gemm = network.find_imported_def("matrix_gemm_f32")
+
+    #Define types for imported continuations. Only needed for printing.
+    #sequential.type = ThorinFnType([mem_type, body_type], ThorinFnType([mem_type], True))
+    #alloc_tensor_thorin.type = ThorinFnType([mem_type, passmanager_type, i32_type, size_fn_type], tensor_type)
+    #load_matrix.type = ThorinFnType([mem_type, tensor_type, string_type, string_type], ThorinFnType([mem_type], True))
+    #mat_softmax.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_sparsecrossentropy.type = ThorinFnType([mem_type, passmanager_type, tensor_type, i32_type], f32_type)
+    #mat_flatten.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_mul.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
+    #mat_add.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
+    #mat_relu.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_gemm.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type], tensor_type)
 
     with ThorinContinuation(network_exec_type, internal="run_network", thorin=network) as (run_network, run_network_mem, image, label, ret_function):
         run_network_mem, frame = thorinEnterExtract(run_network_mem)
         error_accu = ThorinSlot(frame, f32_type)
 
         with ThorinContinuation(body_type, filter=True) as (body_fn, body_mem, passmanager, body_return):
-            allocA_continue, allocA_mem, tensorA = ThorinContinuation(tensor_return_type).__enter__()
-            allocB_continue, allocB_mem, tensorB = ThorinContinuation(tensor_return_type).__enter__()
-            allocAbias_continue, allocAbias_mem, tensorAbias = ThorinContinuation(tensor_return_type).__enter__()
-            allocBbias_continue, allocBbias_mem, tensorBbias = ThorinContinuation(tensor_return_type).__enter__()
-            allocImage_continue, allocImage_mem, tensorImage = ThorinContinuation(tensor_return_type).__enter__()
+            nodes = {}
 
-            flattenReturnCont, flatten_mem, tensorFlat = ThorinContinuation(tensor_return_type).__enter__()
-            multAReturnCont, multA_mem, tensorMultA = ThorinContinuation(tensor_return_type).__enter__()
-            addAReturnCont, addA_mem, tensorAddA = ThorinContinuation(tensor_return_type).__enter__()
-            reluReturnCont, relu_mem, tensorRelu = ThorinContinuation(tensor_return_type).__enter__()
-            multBReturnCont, multB_mem, tensorMultB = ThorinContinuation(tensor_return_type).__enter__()
-            addBReturnCont, addB_mem, tensorAddB = ThorinContinuation(tensor_return_type).__enter__()
+            def translate_operation(onnx_node):
+                if onnx_node.op_type == "Gemm":
+                    return mat_gemm
+                elif onnx_node.op_type == "Flatten":
+                    return mat_flatten
+                elif onnx_node.op_type == "Relu":
+                    return mat_relu
+                elif onnx_node.op_type == "Softmax":
+                    return mat_softmax
+                else:
+                    assert(false)
+
+            def build_node(onnx_node):
+                with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
+                    translate_inputs = [nodes[name]["result"] for name in onnx_node.input]
+
+                    call_function = lambda in_cont, in_mem: in_cont(translate_operation(onnx_node), in_mem, passmanager, *translate_inputs, return_cont)
+                    return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
+
+                    update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor)}
+                    nodes.update({onnx_node.output[0] : update_node})
+                    return onnx_node.output[0]
+
+            def load_initializer(onnx_node):
+                with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
+                    dimensions = onnx_node.dims
+                    dimensions.reverse()
+
+                    call_function = lambda in_cont, in_mem: in_cont(*alloc_and_load_tensor(in_mem, passmanager, return_cont, dimensions, onnx_node.name))
+                    return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
+
+                    update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor)}
+                    nodes.update({onnx_node.name : update_node})
+                    return onnx_node.name
+
+            def link_nodes(entry, exit):
+                cont, mem, _ = entry["block"]
+                exit["call"](cont, mem)
+
+            allocImage_continue, allocImage_mem, tensorImage = ThorinContinuation(tensor_return_type).__enter__()
+            nodes["image_input"] = {"result": tensorImage}
             softmaxReturnCont, softmax_mem, tensorSoftmax = ThorinContinuation(tensor_return_type).__enter__()
 
-            with ThorinContinuation(ret_type) as (error_store_cont, return_mem, value):
-                return_mem = return_mem << (error_accu, value)
-                error_store_cont(body_return, return_mem)
+            for initializer in graph.initializer:
+                print(load_initializer(initializer))
+            for node in graph.node:
+                print(build_node(node))
+
+            link_nodes(nodes["stack.0.weight"], nodes["stack.0.bias"])
+            link_nodes(nodes["stack.0.bias"], nodes["stack.2.weight"])
+            link_nodes(nodes["stack.2.weight"], nodes["stack.2.bias"])
+            link_nodes(nodes["stack.2.bias"], nodes["onnx::Gemm_5"])
+            link_nodes(nodes["onnx::Gemm_5"], nodes["input"])
+            link_nodes(nodes["input"], nodes["onnx::Gemm_7"])
+            link_nodes(nodes["onnx::Gemm_7"], nodes["class"])
 
             def rangeX_body(entry_block, mem, indexX, continueX_block):
                 def rangeY_body(entry_block, mem, indexY, continueY_block):
-                    image_x_ptr = ThorinLEA([image, indexX])
-                    mem, image_x = mem >> image_x_ptr
+                    mem, image_x = mem >> ThorinLEA([image, indexX])
                     image_x_y_ptr = ThorinLEA([image_x, indexY])
 
-                    mem, frame = thorinEnterExtract(mem)
                     addr_ptr = ThorinSlot(frame, ThorinDefiniteArrayType(i64_type, 2))
-
-                    addr_array = ThorinDefiniteArray(i64_type, [ThorinCast(indexX, i64_type), ThorinCast(indexY, i64_type)])
-                    mem = mem << (addr_ptr, addr_array)
-
                     addr_ptr_opaque = ThorinBitcast(addr_ptr, ThorinPointerType(ThorinIndefiniteArrayType(i64_type)))
+
+                    mem = mem << (addr_ptr, ThorinDefiniteArray(i64_type, [ThorinCast(indexX, i64_type), ThorinCast(indexY, i64_type)]))
+
+                    image_access_fn = ThorinExtract(tensorImage, 3)
 
                     with ThorinContinuation(access_return_type) as (store_cont, store_mem, store_ptr):
                         store_mem, value = store_mem >> image_x_y_ptr
@@ -130,32 +173,27 @@ with Thorin("network") as network:
 
                         store_cont(continueY_block, store_mem)
 
-                    image_access_fn = ThorinExtract(tensorImage, 3)
                     entry_block(image_access_fn, mem, addr_ptr_opaque, store_cont)
 
                 def rangeY_return(return_block, mem):
                     return_block(continueX_block, mem)
                 
-                entry_block(*thorinRangeFn(mem, ThorinConstant(i32_type, 0), ThorinConstant(i32_type, 28), ThorinConstant(i32_type, 1), rangeY_body, rangeY_return))
+                entry_block(*thorinRangeFn(mem, 0, 28, 1, rangeY_body, rangeY_return))
 
             def rangeX_return(return_block, mem):
-                return_block(mat_flatten, mem, passmanager, tensorImage, flattenReturnCont)
-                #return_block(exec_network, mem, passmanager, label, tensorA, tensorB, tensorAbias, tensorBbias, tensorImage, error_store_cont)
+                #Execute entry
+                nodes["stack.0.weight"]["call"](return_block, mem)
 
-            flattenReturnCont(mat_mul, flatten_mem, passmanager, tensorA, tensorFlat, multAReturnCont)
-            multAReturnCont(mat_add, multA_mem, passmanager, tensorAbias, tensorMultA, addAReturnCont)
-            addAReturnCont(mat_relu, addA_mem, passmanager, tensorAddA, reluReturnCont)
-            reluReturnCont(mat_mul, relu_mem, passmanager, tensorB, tensorRelu, multBReturnCont)
-            multBReturnCont(mat_add, multB_mem, passmanager, tensorBbias, tensorMultB, addBReturnCont)
-            addBReturnCont(mat_softmax, addB_mem, passmanager, tensorAddB, softmaxReturnCont)
+            body_fn(*alloc_tensor(body_mem, passmanager, allocImage_continue, [28, 28]))
+            allocImage_continue(*thorinRangeFn(allocImage_mem, 0, 28, 1, rangeX_body, rangeX_return))
+
+            #Execute exit
+            with ThorinContinuation(ret_type) as (error_store_cont, return_mem, value):
+                return_mem = return_mem << (error_accu, value)
+                error_store_cont(body_return, return_mem)
+
+            nodes["class"]["cont"](mat_softmax, passmanager, nodes["class"]["result"], softmaxReturnCont)
             softmaxReturnCont(mat_sparsecrossentropy, softmax_mem, passmanager, tensorSoftmax, label, error_store_cont)
-
-            body_fn(*alloc_and_load_tensor(body_mem, passmanager, allocA_continue, [784, 128], "stack.0.weight"))
-            allocA_continue(*alloc_and_load_tensor(allocA_mem, passmanager, allocB_continue, [128, 10], "stack.2.weight"))
-            allocB_continue(*alloc_and_load_tensor(allocB_mem, passmanager, allocAbias_continue, [128], "stack.0.bias"))
-            allocAbias_continue(*alloc_and_load_tensor(allocAbias_mem, passmanager, allocBbias_continue, [10], "stack.2.bias"))
-            allocBbias_continue(*alloc_tensor(allocBbias_mem, passmanager, allocImage_continue, [28, 28]))
-            allocImage_continue(*thorinRangeFn(allocImage_mem, ThorinConstant(i32_type, 0), ThorinConstant(i32_type, 28), ThorinConstant(i32_type, 1), rangeX_body, rangeX_return))
 
         with ThorinContinuation(return_type) as (return_cont, return_mem):
             return_mem, ret_value = return_mem >> error_accu
