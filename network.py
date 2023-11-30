@@ -111,17 +111,6 @@ with Thorin("network") as network:
                 else:
                     assert(false)
 
-            def build_node(onnx_node):
-                with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
-                    translate_inputs = [nodes[name]["result"] for name in onnx_node.input]
-
-                    call_function = lambda in_cont, in_mem: in_cont(translate_operation(onnx_node), in_mem, passmanager, *translate_inputs, return_cont)
-                    return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
-
-                    update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor)}
-                    nodes.update({onnx_node.output[0] : update_node})
-                    return onnx_node.output[0]
-
             def load_initializer(onnx_node):
                 with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
                     dimensions = onnx_node.dims
@@ -134,32 +123,32 @@ with Thorin("network") as network:
                     nodes.update({onnx_node.name : update_node})
                     return onnx_node.name
 
+            def build_node(onnx_node):
+                with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
+                    call_function = lambda in_cont, in_mem: in_cont(translate_operation(onnx_node), in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], return_cont)
+                    return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
+
+                    update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor)}
+                    nodes.update({onnx_node.output[0] : update_node})
+                    return onnx_node.output[0]
+
             def link_nodes(entry, exit):
                 cont, mem, _ = entry["block"]
                 exit["call"](cont, mem)
 
+            unordered_nodes = []
+            ordered_nodes = []
+
+
+            alloc_block = ()
             allocImage_continue, allocImage_mem, tensorImage = ThorinContinuation(tensor_return_type).__enter__()
-            nodes["image_input"] = {"result": tensorImage}
-            softmaxReturnCont, softmax_mem, tensorSoftmax = ThorinContinuation(tensor_return_type).__enter__()
-
-            for initializer in graph.initializer:
-                print(load_initializer(initializer))
-            for node in graph.node:
-                print(build_node(node))
-
-            link_nodes(nodes["stack.0.weight"], nodes["stack.0.bias"])
-            link_nodes(nodes["stack.0.bias"], nodes["stack.2.weight"])
-            link_nodes(nodes["stack.2.weight"], nodes["stack.2.bias"])
-            link_nodes(nodes["stack.2.bias"], nodes["onnx::Gemm_5"])
-            link_nodes(nodes["onnx::Gemm_5"], nodes["input"])
-            link_nodes(nodes["input"], nodes["onnx::Gemm_7"])
-            link_nodes(nodes["onnx::Gemm_7"], nodes["class"])
 
             def rangeX_body(entry_block, mem, indexX, continueX_block):
                 def rangeY_body(entry_block, mem, indexY, continueY_block):
                     mem, image_x = mem >> ThorinLEA([image, indexX])
                     image_x_y_ptr = ThorinLEA([image_x, indexY])
 
+                    mem, frame = thorinEnterExtract(mem)
                     addr_ptr = ThorinSlot(frame, ThorinDefiniteArrayType(i64_type, 2))
                     addr_ptr_opaque = ThorinBitcast(addr_ptr, ThorinPointerType(ThorinIndefiniteArrayType(i64_type)))
 
@@ -181,18 +170,59 @@ with Thorin("network") as network:
                 entry_block(*thorinRangeFn(mem, 0, 28, 1, rangeY_body, rangeY_return))
 
             def rangeX_return(return_block, mem):
-                #Execute entry
-                nodes["stack.0.weight"]["call"](return_block, mem)
+                global alloc_block
+                alloc_block = (return_block, mem, tensorImage)
 
-            body_fn(*alloc_tensor(body_mem, passmanager, allocImage_continue, [28, 28]))
             allocImage_continue(*thorinRangeFn(allocImage_mem, 0, 28, 1, rangeX_body, rangeX_return))
+
+            nodes["image_input"] = {"result": tensorImage,
+                                    "call": lambda in_cont, in_mem: in_cont(*alloc_tensor(in_mem, passmanager, allocImage_continue, [28, 28])),
+                                    "cont": lambda out_cont, *out_param: alloc_block[0](out_cont, alloc_block[1], *out_param),
+                                    "block": alloc_block}
+
+            ordered_nodes.append("image_input")
+
+            for initializer in graph.initializer:
+                print(load_initializer(initializer))
+                ordered_nodes.append(initializer.name)
+            for node in graph.node:
+                print(build_node(node))
+                required_nodes = node.input
+                unordered_nodes.append((node.output[0], required_nodes))
+                #ordered_nodes.append(node.output[0])
+
+            print("ordereing")
+
+            for node, required in unordered_nodes:
+                my_required = list(required)
+
+                for i in range(0, len(ordered_nodes)):
+                    while ordered_nodes[i] in my_required:
+                        my_required.remove(ordered_nodes[i])
+                    if my_required == []:
+                        ordered_nodes.insert(i + 1, node)
+                        break
+                else:
+                    print(my_required)
+                    assert(False)
+
+            for n in ordered_nodes:
+                print(n)
+
+            for i in range(0, len(ordered_nodes) - 1):
+                link_nodes(nodes[ordered_nodes[i]], nodes[ordered_nodes[i+1]])
+
+            #Execute entry
+            nodes[ordered_nodes[0]]["call"](body_fn, body_mem)
 
             #Execute exit
             with ThorinContinuation(ret_type) as (error_store_cont, return_mem, value):
                 return_mem = return_mem << (error_accu, value)
                 error_store_cont(body_return, return_mem)
 
-            nodes["class"]["cont"](mat_softmax, passmanager, nodes["class"]["result"], softmaxReturnCont)
+            softmaxReturnCont, softmax_mem, tensorSoftmax = ThorinContinuation(tensor_return_type).__enter__()
+
+            nodes[graph.output[0].name]["cont"](mat_softmax, passmanager, nodes[graph.output[0].name]["result"], softmaxReturnCont)
             softmaxReturnCont(mat_sparsecrossentropy, softmax_mem, passmanager, tensorSoftmax, label, error_store_cont)
 
         with ThorinContinuation(return_type) as (return_cont, return_mem):
