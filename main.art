@@ -1,4 +1,4 @@
-#[intern] fn @run_network(_image : &[&[f32]], _label : i32) -> f32;
+#[intern] fn @run_network(_image : &[f32]) -> &[f32];
 
 #[export]
 fn main () -> i32 {
@@ -14,11 +14,22 @@ fn main () -> i32 {
     for benchmark_cpu() {
         for i in range(0, num_tests) {
             let image_buffer = data_test(i).image_buffer;
-            let image = bitcast[&[&[f32]]](image_buffer.data);
+            let image = bitcast[&[f32]](image_buffer.data);
 
-            let error = run_network(image, data_test(i).label);
-            sum += error;
-            run_test += 1;
+            let result_data = run_network(image);
+
+            for manager in sequential() {
+                let result_tensor = Tensor[f32] {
+                    buffer = Buffer { data = bitcast[&mut[i8]](result_data), size = 0, device = 0 },
+                    num_dims = 1,
+                    size_fn = @|_n| { 10 },
+                    access_fn = @|dims| { &mut (bitcast[&mut[f32]](result_data)(dims(0))) }
+                };
+
+                let softmax_result = @matrix_softmax_f32(manager, result_tensor);
+                sum += @matrix_sparsecrossentropy_f32(manager, softmax_result, data_test(i).label);
+                run_test += 1;
+            }
             //print_i32(i);
             //print_string("\n");
         }

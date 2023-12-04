@@ -539,7 +539,7 @@ class ThorinClosure(ThorinDef):
 
 
 class ThorinStruct(ThorinDef):
-    def __init__(self, args, struct_type):
+    def __init__(self, struct_type, args):
         super().__init__()
         self.args = args
         self.struct_type = struct_type
