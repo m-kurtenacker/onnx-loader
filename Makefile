@@ -39,7 +39,7 @@ plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp plugin/build
 plugin/build/loader_runtime.so: plugin/load_runtime.cpp plugin/build
 	@make -C plugin/build all
 
-main.thorin.json: main.art read.art utils.art mat.art sequential.art
+main.thorin.json: main.art read.art utils.art sequential.art mat.art
 	artic \
 		${RUNTIME} \
 		$^ \
@@ -92,9 +92,9 @@ network-compiled.thorin.json: network-combined.thorin.json plugin/build/loader.s
 		--log-level ${LOG_LEVEL} \
 		-o network-compiled
 
-combined.ll: main-compiled.thorin.json network-compiled.thorin.json plugin/build/loader.so
+combined.ll: main-compiled.thorin.json network-compiled.thorin.json
 	anyopt \
-		main-compiled.thorin.json network-compiled.thorin.json \
+		$^ \
 		--pass cleanup \
 		--pass lower2cff \
 		--pass flatten_tuples \
@@ -105,7 +105,6 @@ combined.ll: main-compiled.thorin.json network-compiled.thorin.json plugin/build
 		--pass dead_load_opt \
 		--pass cleanup \
 		--pass codegen_prepare \
-		--plugin plugin/build/loader.so \
 		--emit-llvm \
 		--log-level ${LOG_LEVEL} \
 		-o combined

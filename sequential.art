@@ -1,5 +1,8 @@
+static vector_width = 8;
+
 struct PassManager {
     alloc: fn (i64) -> Buffer,
+    alloc_dynamic: fn(i64, i64) -> Buffer,
     release: fn (Buffer) -> ()
 }
 
@@ -11,18 +14,37 @@ fn @round_down(n: i32, d: i32) -> i32 {
   (n / d) * d
 }
 
-fn @vector_loop(body: fn(i32) -> ()) = @|n: i32| {
-    if true {
-        let vector_width = 4;
+fn @vector_range(body: fn(i32) -> ()) = @|start: i32, stop: i32| {
+    let n = stop - start;
+    if vector_width > 0 {
         let n_vec = round_down(n, vector_width);
         for i in range_step(0, n_vec, vector_width) {
-            vectorize(vector_width, |j| @body(i + j))
+            vectorize(vector_width, |j| @body(i + j + start))
         }
         for i in range(n_vec, n) {
-            @body(i)
+            //vectorize(1, |j| @body(i + j + start))
+            @body(i + start)
         }
     } else {
-        for i in range(0, n) {
+        for i in range(start, stop) {
+            @body(i)
+        }
+    }
+};
+
+fn @vector_unroll(body: fn(i32) -> ()) = @|start: i32, stop: i32| {
+    let n = stop - start;
+    if vector_width > 0 {
+        let n_vec = round_down(n, vector_width);
+        for i in unroll_step(0, n_vec, vector_width) {
+            vectorize(vector_width, |j| @body(i + j + start))
+        }
+        for i in unroll(n_vec, n) {
+            //vectorize(1, |j| @body(i + j + start))
+            @body(i + start)
+        }
+    } else {
+        for i in unroll(start, stop) {
             @body(i)
         }
     }
@@ -83,13 +105,43 @@ fn load_matrix_into(tensor: Tensor[f32], file_name: &[u8], matrix_name: &[u8]) -
 //#[import(cc = "plugin", name = "static_alloca", depends = load_matrix_into)] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
 #[import(cc = "plugin", name = "static_release")] fn static_release(&mut [i8]) -> (fn() -> ());
 
+#[import (cc = "plugin", name = "build_dynamic_array")] fn dynamic_array [T] (_element: T, _size: i64) -> (fn() -> &mut [T]);
+
 fn @get_buffer_managed(min_size: i64) = Buffer {
     data = static_alloca(min_size)(),
     size = min_size,
     device = 0
 };
 
+fn @get_buffer_dynamic(init: i64, num_elements: i64) = Buffer {
+    data = bitcast[&mut[i8]](dynamic_array(init, num_elements)()),
+    size = sizeof[i64]() * num_elements,
+    device = 0
+};
+
 fn @release_buffer_managed(_buffer : Buffer) { }
+
+fn @sub_tensor[T] (manager: PassManager, input : Tensor[T], lower_bounds : &[i64], upper_bounds : &[i64]) -> Tensor[T] {
+    let new_size_fn = @|i: i32| { upper_bounds(i) - lower_bounds(i) };
+
+    let new_access_fn = |n : &[i64]| {
+        let new_address_buffer = manager.alloc(sizeof[i64]() * input.num_dims as i64);
+        let new_address = bitcast[&mut[i64]](new_address_buffer.data);
+
+        for i in unroll(0, input.num_dims) {
+            new_address(i) = n(i) + lower_bounds(i);
+        }
+
+        input.access_fn(new_address)
+    };
+
+    Tensor[T] {
+        buffer = input.buffer,
+        num_dims = input.num_dims,
+        size_fn = new_size_fn,
+        access_fn = new_access_fn
+    }
+}
 
 fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) -> Tensor[T] {
     let mut size = 1 as i64;
@@ -101,8 +153,8 @@ fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> 
 
     let new_access_fn = |n : &[i64]| {
         let mut address = n(num_dims - 1);
-        for i in unroll(1, num_dims) {
-            address = address * size_fn(i - 1) + n(num_dims - 1 - i);
+        for i in unroll(0, num_dims - 1) {
+            address = address * size_fn(num_dims - 2 - i) + n(num_dims - 2 - i);
         }
         &mut bitcast[&mut[T]](buffer.data)(address)
     };
@@ -152,7 +204,7 @@ fn @make_loopinstance(manager : PassManager, num_dims : i32, n : &[i64]) -> Loop
 fn @multi_loop (body: fn(LoopInstance) -> ()) = @|manager: PassManager, num_dims: i32, n: &[i64]| {
     let instance = make_loopinstance(manager, num_dims, n);
 
-    @multi_loop_instanced(body, 0, instance);
+    multi_loop_instanced(body, 0, num_dims, instance);
 };
 
 fn @multi_loop_vector (body: fn(LoopInstance) -> ()) = @|manager: PassManager, num_dims: i32, n: &[i64]| {
@@ -160,36 +212,38 @@ fn @multi_loop_vector (body: fn(LoopInstance) -> ()) = @|manager: PassManager, n
 
     //static_array_set_element(&instance.mode(0), LoopMode::Vectorized);
 
-    @multi_loop_instanced(body, 0, instance);
+    multi_loop_instanced(body, 0, num_dims, instance);
 };
 
-fn multi_loop_instanced (body: fn(LoopInstance) -> (), current_dim: i32, instance : LoopInstance) -> () {
-    if current_dim < instance.num_dims {
+fn @(?current_dim & ?num_dims) multi_loop_instanced (body: fn(LoopInstance) -> (), current_dim: i32, num_dims: i32, instance : LoopInstance) -> () {
+    //pe_info("Current dim", current_dim);
+    if current_dim < num_dims {
         let mode = instance.mode(current_dim);
 
         match mode {
             LoopMode::Sequential => {
                 for i in range(instance.min(current_dim) as i32, instance.max(current_dim) as i32) {
                     instance.index(current_dim) = i as i64;
-                    multi_loop_instanced(body, current_dim + 1, instance);
+                    multi_loop_instanced(body, current_dim + 1, num_dims, instance);
                 }
             },
             LoopMode::Vectorized => {
-                let vector_width = 4;
-                let mut vector_buffers : [Buffer * 4];
+                //let mut vector_buffers : [Buffer * vector_width];
+                let mut vector_buffers : [Buffer * 8];
 
-                for i in range(0, vector_width) {
+                for i in unroll(0, vector_width) {
                     let index_buffer_alloc = instance.manager.alloc(sizeof[i64]() * instance.num_dims as i64);
+                    //let index_buffer_alloc = alloc_cpu(sizeof[i64]() * instance.num_dims as i64);
 
                     let index_buffer = bitcast[&mut[i64]](index_buffer_alloc.data);
-                    for j in range(0, current_dim) {
+                    for j in unroll(0, current_dim) {
                         index_buffer(j) = instance.index(j);
                     }
 
                     vector_buffers(i) = index_buffer_alloc;
                 }
 
-                for i in vector_loop((instance.max(current_dim) - instance.min(current_dim)) as i32) {
+                for i in vector_range(0, (instance.max(current_dim) - instance.min(current_dim)) as i32) {
                     let index_buffer_alloc = vector_buffers(i % vector_width);
                     let index_buffer = bitcast[&mut[i64]](index_buffer_alloc.data);
 
@@ -205,7 +259,7 @@ fn multi_loop_instanced (body: fn(LoopInstance) -> (), current_dim: i32, instanc
 
                     current_instance.index(current_dim) = i as i64 + instance.min(current_dim);
 
-                    multi_loop_instanced(body, current_dim + 1, current_instance);
+                    //multi_loop_instanced(body, current_dim + 1, num_dims, current_instance);
                 }
             },
 
@@ -215,17 +269,16 @@ fn multi_loop_instanced (body: fn(LoopInstance) -> (), current_dim: i32, instanc
     } else {
         @body(instance);
     }
-
-
 }
 
 #[intern]
 fn sequential (body: fn(PassManager) -> ()) = @|| {
     let manager = PassManager {
         alloc = get_buffer_managed,
-        release = @|buffer| { release_buffer_managed(buffer); }
+        alloc_dynamic = get_buffer_dynamic,
+        release = @|buffer| { release_buffer_managed(buffer); },
     };
-    body(manager);
+    @body(manager);
 };
 
 #[intern] fn @alloc_tensor_f32 (manager: PassManager, num_dims: i32, size_fn : fn(i32) -> i64) = @alloc_tensor[f32](manager, num_dims, size_fn);

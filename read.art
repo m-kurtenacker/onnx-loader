@@ -31,11 +31,43 @@ fn read_train() -> &[image_item] {
     }
 
     for i in range(0, 60000) {
+        /*let mut histogram : [i32 * 256];
+
+        for j in range(0, 256) {
+            histogram(j) = 0;
+        }
+
+        let mut mean = 0 as f32;
+        for x in range(0, 28) {
+            for y in range(0, 28) {
+                let data = images(i * 28 * 28 + y * 28 + x);
+
+                histogram(data) += 1;
+                mean += data as f32;
+            }
+        }
+        mean = mean / (28 * 28);
+
+        let mut stddev = 0 as f32;
+        for j in range(0, 256) {
+            let data = histogram(j);
+
+            let distance = mean - j as f32;
+            let distance_sqr = distance * distance;
+            
+            stddev += distance_sqr;
+        }
+        stddev = math_builtins::sqrt(stddev / (28 * 28))*/
+
+        let mean = 0.1307 as f32;
+        let stddev = 0.3081 as f32;
+
         items(i).image_buffer = alloc_cpu(sizeof[&[f32]]() * 28 * 28);
         let image = bitcast[&mut[f32]](items(i).image_buffer.data);
         for x in range(0, 28) {
             for y in range(0, 28) {
-                image(y * 28 + x) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
+                //image(y * 28 + x) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
+                image(y * 28 + x) = ((images(i * 28 * 28 + y * 28 + x) as f32 / 255.0) - mean) / stddev;
             }
         }
     }
@@ -60,11 +92,15 @@ fn read_test() -> &[image_item] {
     }
 
     for i in range(0, 10000) {
+        let mean = 0.1307 as f32;
+        let stddev = 0.3081 as f32;
+
         items(i).image_buffer = alloc_cpu(sizeof[&[f32]]() * 28 * 28);
         let image = bitcast[&mut[f32]](items(i).image_buffer.data);
         for x in range(0, 28) {
             for y in range(0, 28) {
-                image(y * 28 + x) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
+                //image(y * 28 + x) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
+                image(y * 28 + x) = ((images(i * 28 * 28 + y * 28 + x) as f32 / 255.0) - mean) / stddev;
             }
         }
     }

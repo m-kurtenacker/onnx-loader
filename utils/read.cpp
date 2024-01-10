@@ -128,6 +128,8 @@ void main_old () {
     read_train_images(&images);
 }
 
+int rv_lane_id() { return 0; }
+
 #ifdef __cplusplus
 }
 #endif

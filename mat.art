@@ -1,63 +1,252 @@
-fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) -> Tensor[f32] {
-    let num_result_dims = mat.num_dims - input.num_dims;
+#[export] static mut time_mut : i64;
+
+fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
+    if (false) {
+        print_string("Tensor ");
+        print_string(name);
+        print_string(" [");
+        for i in range(0, mat.num_dims - 1) {
+            print_i64(mat.size_fn(i));
+            print_string(" x ");
+        }
+        print_i64(mat.size_fn(mat.num_dims - 1));
+        print_string("]:\n");
+
+        if mat.num_dims == 1 {
+            for x in range(0, mat.size_fn(0) as i32) {
+                print_f32(*mat.access_fn([x as i64]));
+                print_string(" ");
+            }
+            print_string("\n");
+        } else if mat.num_dims == 2 {
+            for y in range(0, mat.size_fn(1) as i32) {
+                for x in range(0, mat.size_fn(0) as i32) {
+                    print_f32(*mat.access_fn([x as i64, y as i64]));
+                    print_string(" ");
+                }
+                print_string("\n");
+            }
+        } else if mat.num_dims == 3 {
+            for chan in range(0, mat.size_fn(2) as i32) {
+                print_string("chan_");
+                print_i32(chan);
+                print_string(":\n");
+
+                for y in range(0, mat.size_fn(1) as i32) {
+                    for x in range(0, mat.size_fn(0) as i32) {
+                        print_f32(*mat.access_fn([x as i64, y as i64, chan as i64]));
+                        print_string(" ");
+                    }
+                    print_string("\n");
+                }
+            }
+        } else {
+            print_string("Printing error: too many dimensions\n");
+        }
+    }
+}
+
+fn @mat_mul_simple (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) -> Tensor[f32] {
+    let num_result_dims = 1;
     let new_size_fn = @|i : i32| -> i64 {
-        if i < num_result_dims { mat.size_fn(input.num_dims + i) } else { 0 as i64 }
+        mat.size_fn(i + 1)
     };
     let output = @alloc_tensor[f32](manager, num_result_dims, new_size_fn);
 
-    let result_dims_buffer = manager.alloc(sizeof[i64]() * num_result_dims as i64);
-    let result_dims = bitcast[&mut [i64]](result_dims_buffer.data);
-    for index in range(0, num_result_dims) {
-        result_dims(index) = new_size_fn(index);
-    }
-
-    let input_dims_buffer = manager.alloc(sizeof[i64]() * input.num_dims as i64);
-    let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
-    for index in range(0, input.num_dims) {
-        input_dims(index) = input.size_fn(index);
-    }
-
-    for instance in multi_loop (manager, num_result_dims, result_dims) {
-        let matrix_dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-        let matrix_dims = bitcast[&mut [i64]](matrix_dims_buffer.data);
-
-        for i in range(0, num_result_dims) {
-            matrix_dims(input.num_dims + i) = instance.index(i)
-        }
-
+    for i in range(0, output.size_fn(0) as i32) {
         let mut sum = 0 as f32;
-
-        for inner_instance in multi_loop (manager, input.num_dims, input_dims) {
-            for i in range(0, input.num_dims) {
-                matrix_dims(i) = inner_instance.index(i);
-            }
-
-            let d = (*mat.access_fn(matrix_dims)) * (*input.access_fn(inner_instance.index));
-            sum += d;
-            //atomic_add(&mut sum, d);
+        for k in range(0, input.size_fn(0) as i32) {
+            sum += (*input.access_fn([k as i64])) * (*mat.access_fn([k as i64, i as i64]))
         }
-
-        *output.access_fn(instance.index) = sum;
-
-        manager.release(matrix_dims_buffer);
+        *output.access_fn([i as i64]) = sum;
     }
-
-    manager.release(result_dims_buffer);
-    manager.release(input_dims_buffer);
 
     output
+}
+
+fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    if (input.num_dims == 1 && mat.num_dims == 2) {
+        let output = mat_mul_simple(manager, mat, input);
+
+        time_mut += get_micro_time() - start;
+
+        output
+    } else {
+        let num_result_dims = mat.num_dims - input.num_dims;
+        let new_size_fn = @|i : i32| -> i64 {
+            if i < num_result_dims { mat.size_fn(input.num_dims + i) } else { 0 as i64 }
+        };
+        let output = @alloc_tensor[f32](manager, num_result_dims, new_size_fn);
+
+        let result_dims_buffer = manager.alloc_dynamic(0: i64, num_result_dims as i64);
+        let result_dims = bitcast[&mut [i64]](result_dims_buffer.data);
+        for index in vector_unroll(0, num_result_dims) {
+            result_dims(index) = new_size_fn(index);
+        }
+
+        let input_dims_buffer = manager.alloc_dynamic(0: i64, input.num_dims as i64);
+        let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
+        for index in vector_unroll(0, input.num_dims) {
+            input_dims(index) = input.size_fn(index);
+        }
+
+        for instance in multi_loop_vector (manager, num_result_dims, result_dims) {
+            let mut sum = 0 as f32;
+
+            let matrix_dims_buffer = manager.alloc_dynamic(0, mat.num_dims as i64);
+            let matrix_dims = bitcast[&mut [i64]](matrix_dims_buffer.data);
+
+            for j in unroll(0, num_result_dims) {
+                matrix_dims(input.num_dims + j) = instance.index(j);
+            }
+
+            for inner_instance in multi_loop (manager, input.num_dims, input_dims) {
+                for i in unroll(0, input.num_dims) {
+                    matrix_dims(i) = inner_instance.index(i);
+                }
+
+                let d = (*mat.access_fn(matrix_dims)) * (*input.access_fn(inner_instance.index));
+
+                sum += d;
+            }
+
+            *output.access_fn(instance.index) = sum;
+        }
+
+        time_mut += get_micro_time() - start;
+
+        output
+    }
 }
 
 #[intern]
 fn @matrix_multiply_f32 (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) = @matrix_multiply(manager, mat, input);
 
+#[export] static mut time_conv : i64;
+
+fn @matrix_convolution (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32]) -> Tensor[f32] {
+    if input.size_fn(1) == 28 {
+        print_tensor("Input", input);
+    }
+
+
+    let start = get_micro_time();
+
+    /* input shape:  [ X x Y x in_chan ]
+       weight shape: [ Xk x Yk x in_chan x out_chan ]
+       bias shape:   [ out_chan ]
+       output shape: [ Xo x Yo x out_chan ]
+    */
+
+    let new_sizes = [
+            input.size_fn(0) - weight.size_fn(0) + 1 as i64,
+            input.size_fn(1) - weight.size_fn(1) + 1 as i64,
+            bias.size_fn(0)
+    ];
+
+    let new_size_fn = @|n : i32| -> i64 {
+        new_sizes(n)
+    };
+
+    let output = @alloc_tensor[f32](manager, input.num_dims, new_size_fn);
+
+    let num_in_chan = input.size_fn(2) as i32;
+    let num_out_chan = bias.size_fn(0) as i32;
+
+    for x in range(1, input.size_fn(0) as i32 - 1) {
+        for y in range(1, input.size_fn(1) as i32 - 1) {
+            for out_chan in range(0, num_out_chan) {
+                let mut sum = 0 as f32;
+
+                for in_chan in range(0, num_in_chan) {
+                    for xk in range(-1, 2) {
+                        for yk in range(-1, 2) {
+                            let data = *input.access_fn([(x + xk) as i64, (y + yk) as i64, in_chan as i64]);
+                            let weight = *weight.access_fn([xk as i64 + 1, yk as i64 + 1, in_chan as i64, out_chan as i64]);
+
+                            sum += data * weight;
+                        }
+                    }
+                }
+
+                sum += *bias.access_fn([out_chan as i64]);
+
+                //sum = out_chan as f32 + x as f32 * 0.01 + y as f32 * 0.0001;
+
+                *output.access_fn([x as i64 - 1, y as i64 - 1, out_chan as i64]) = sum;
+            }
+        }
+    }
+
+    /*let output_dims_buffer = manager.alloc_dynamic(0: i64, output.num_dims as i64);
+    let output_dims = bitcast[&mut [i64]](output_dims_buffer.data);
+    for index in unroll(0, output.num_dims) {
+        output_dims(index) = output.size_fn(index);
+    }
+
+    for inst_out in multi_loop (manager, output.num_dims, output_dims) {
+        let out_chan = inst_out.index(0);
+
+        let mut sum = 0 as f32;
+
+        let weight_dims_buffer = manager.alloc_dynamic(0: i64, (weight.num_dims - 1) as i64);
+        let weight_dims = bitcast[&mut [i64]](weight_dims_buffer.data);
+        for index in unroll(0, weight.num_dims - 1) Mult simple{
+            weight_dims(index) = weight.size_fn(index);
+        }
+
+        for inst_kernel in multi_loop (manager, weight.num_dims - 1, weight_dims) {
+            let in_chan = inst_kernel.index(weight.num_dims - 2);
+
+            let weight_index_buffer = manager.alloc_dynamic(0: i64, weight.num_dims as i64);
+            let weight_index = bitcast[&mut [i64]](weight_index_buffer.data);
+            for j in unroll(0, weight.num_dims) {
+                if j == weight.num_dims - 1 {
+                    weight_index(j) = out_chan;
+                } else {
+                    weight_index(j) = inst_kernel.index(j);
+                }
+            }
+
+            let input_index_buffer = manager.alloc_dynamic(0: i64, input.num_dims as i64);
+            let input_index = bitcast[&mut [i64]](input_index_buffer.data);
+
+            for j in unroll(0, input.num_dims) {
+                if j == 0 {Mult simple
+                    input_index(j) = in_chan
+                } else {
+                    input_index(j) = inst_out.index(j) + inst_kernel.index(j + 1);
+                }
+            }
+
+            sum += (*input.access_fn(input_index)) * (*weight.access_fn(weight_index)) + (*bias.access_fn([out_chan]));
+        }
+
+        *output.access_fn(inst_out.index) = sum;
+    }*/
+
+    time_conv += get_micro_time() - start;
+
+    print_tensor("Convolution", output);
+
+    output
+}
+
+#[intern]
+fn @matrix_convolution_f32 (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32]) = @matrix_convolution(manager, input, weight, bias);
+
+#[export] static mut time_add : i64;
+
 fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
     let output = @alloc_tensor[f32](manager, matA.num_dims, matA.size_fn);
 
     let dims_buffer = manager.alloc(sizeof[i64]() * matA.num_dims as i64);
     let dims = bitcast[&mut [i64]](dims_buffer.data);
-    //for index in vector_loop(matA.num_dims) {
-    for index in range(0, matA.num_dims) {
+    for index in unroll(0, matA.num_dims) {
         dims(index) = matA.size_fn(index);
     }
 
@@ -70,6 +259,33 @@ fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> T
 
     manager.release(dims_buffer);
 
+    time_add += get_micro_time() - start;
+
+    output
+}
+
+fn @matrix_sub (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    let output = @alloc_tensor[f32](manager, matA.num_dims, matA.size_fn);
+
+    let dims_buffer = manager.alloc(sizeof[i64]() * matA.num_dims as i64);
+    let dims = bitcast[&mut [i64]](dims_buffer.data);
+    for index in unroll(0, matA.num_dims) {
+        dims(index) = matA.size_fn(index);
+    }
+
+    for instance in multi_loop (manager, matA.num_dims, dims) {
+        let A = *matA.access_fn(instance.index);
+        let B = *matB.access_fn(instance.index);
+
+        *output.access_fn(instance.index) = A - B;
+    }
+
+    manager.release(dims_buffer);
+
+    time_add += get_micro_time() - start;
+
     output
 }
 
@@ -78,20 +294,33 @@ fn @matrix_add_f32 (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) 
 
 #[intern]
 fn @matrix_gemm_f32 (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32]) {
+    print_tensor("Gemm input", input);
+    
     let mult_result = @matrix_multiply(manager, weight, input);
-    @matrix_add(manager, bias, mult_result)
+
+    print_tensor("Gemm inter", mult_result);
+
+    let output = @matrix_add(manager, bias, mult_result);
+
+    print_tensor("Gemm", output);
+
+    output
 }
 
+#[export] static mut time_relu : i64;
+
 fn @matrix_relu (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
     let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
 
     let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
     let dims = bitcast[&mut [i64]](dims_buffer.data);
-    for index in range(0, mat.num_dims) {
+    for index in unroll(0, mat.num_dims) {
         dims(index) = mat.size_fn(index);
     }
 
-    for instance in multi_loop_vector (manager, mat.num_dims, dims) {
+    for instance in multi_loop (manager, mat.num_dims, dims) {
         let d = *mat.access_fn(instance.index);
         let r = if d < 0 { 0 as f32 } else { d };
         *output.access_fn(instance.index) = r;
@@ -99,36 +328,128 @@ fn @matrix_relu (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
 
     manager.release(dims_buffer);
 
+    time_relu += get_micro_time() - start;
+
     output
 }
 
 #[intern]
 fn @matrix_relu_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_relu(manager, mat);
 
+fn @matrix_dropout (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
+    mat
+}
+
+#[intern]
+fn @matrix_dropout_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_dropout(manager, mat);
+
+fn @matrix_max_pool (manager: PassManager, input: Tensor[f32]) -> Tensor[f32] {
+
+    //TODO: This only works with a specific kernel shape for now.
+
+    /* input shape:  [ X x Y x chan ]
+       output shape: [ X/xk x Y/yk x chan ]
+    */
+
+    let new_size_fn = @|n : i32| -> i64 {
+        /*if n == 0 {
+            input.size_fn(n)
+        } else {
+            input.size_fn(n) / 2
+        }*/
+        [12 as i64, 12 as i64, 4 as i64](n)
+    };
+
+    let output = @alloc_tensor[f32](manager, input.num_dims, new_size_fn);
+
+    let output_dims_buffer = manager.alloc(sizeof[i64]() * output.num_dims as i64);
+    let output_dims = bitcast[&mut [i64]](output_dims_buffer.data);
+    for index in unroll(0, input.num_dims) {
+        output_dims(index) = output.size_fn(index);
+    }
+
+    let num_kernel_dims = input.num_dims - 1;
+
+    //let kernel_dims_buffer = manager.alloc_dynamic(1: i64, num_kernel_dims as i64);
+    //let kernel_dims = bitcast[&mut [i64]](kernel_dims_buffer.data);
+
+    //for inst_out in multi_loop (manager, output.num_dims, output_dims) {
+    for chan in range(0, 4) {
+        for x in range(0, 12) {
+            for y in range(0, 12) {
+        //let chan = inst_out.index(0);
+
+        //let data1 = *input.access_fn([chan, 2 * inst_out.index(1), 2 * inst_out.index(2)]);
+        //let data2 = *input.access_fn([chan, 2 * inst_out.index(1) + 1, 2 * inst_out.index(2)]);
+        //let data3 = *input.access_fn([chan, 2 * inst_out.index(1), 2 * inst_out.index(2) + 1]);
+        //let data4 = *input.access_fn([chan, 2 * inst_out.index(1) + 1, 2 * inst_out.index(2) + 1]);
+
+        let data1 = *input.access_fn([2 * x as i64,     2 * y as i64,     chan as i64]);
+        let data2 = *input.access_fn([2 * x as i64 + 1, 2 * y as i64,     chan as i64]);
+        let data3 = *input.access_fn([2 * x as i64,     2 * y as i64 + 1, chan as i64]);
+        let data4 = *input.access_fn([2 * x as i64 + 1, 2 * y as i64 + 1, chan as i64]);
+
+        let max_1 = math_builtins::fmax(data1, data2);
+        let max_2 = math_builtins::fmax(data3, data4);
+
+        let max = math_builtins::fmax(max_1, max_2);
+
+        //let mut max = -5 : f32;
+
+        /*for inst_kernel in multi_loop (manager, num_kernel_dims, kernel_dims) {
+            let input_index_buffer = manager.alloc_dynamic(0 as i64, input.num_dims as i64);
+            let input_index = bitcast[&mut [i64]](input_index_buffer.data);
+
+            for j in unroll(0, input.num_dims) {
+                if j == 0 {
+                    input_index(j) = chan;
+                } else {
+                    input_index(j) = (2 * inst_out.index(j)) + inst_kernel.index(j);
+                }
+            }
+
+            max = math_builtins::fmax(max, *input.access_fn(input_index));
+        }*/
+
+        //*output.access_fn(inst_out.index) = max;
+        *output.access_fn([x as i64, y as i64, chan as i64]) = max;
+    } } }
+
+    print_tensor("MaxPool", output);
+
+    output
+}
+
+#[intern]
+fn @matrix_max_pool_f32 (manager: PassManager, input: Tensor[f32]) = @matrix_max_pool(manager, input);
+
 fn @matrix_flatten[T] (manager: PassManager, mat: Tensor[T]) -> Tensor[T] {
     let mut size = 1 as i64;
     for i in unroll (0, mat.num_dims) {
         size *= mat.size_fn(i);
     }
-    let new_size_fn = |_n : i32| { size };
+    let new_size_fn = @|_n : i32| { size };
 
-    let new_access_fn = |n : &[i64]| {
-        let mut r = n(0);
+    let new_access_fn = @|n : &[i64]| {
+        //let mut r = n(0);
 
-        let address_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-        let address = bitcast[&mut[i64]](address_buffer.data);
+        //let address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
+        //let address = bitcast[&mut[i64]](address_buffer.data);
+        //let mut address : [i64 * 2];
 
-        for i in unroll(0, mat.num_dims) {
-            let n = r % mat.size_fn(i);
-            address(i) = n;
-            r = (r - n) / mat.size_fn(i);
-        }
+        //for i in unroll(0, mat.num_dims) {
+            //let n = r % mat.size_fn(i);
+            //address(i) = n;
+            //r = (r - n) / mat.size_fn(i);
+        //}
 
-        let access = mat.access_fn(address);
+        //let access = mat.access_fn(address);
 
-        manager.release(address_buffer);
+        //manager.release(address_buffer);
 
-        access
+        //access
+
+        &mut (bitcast[&mut[T]](mat.buffer.data)(n(0)))
     };
 
     Tensor[T] {
@@ -140,7 +461,66 @@ fn @matrix_flatten[T] (manager: PassManager, mat: Tensor[T]) -> Tensor[T] {
 }
 
 #[intern]
-fn @matrix_flatten_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_flatten[f32](manager, mat);
+fn @matrix_flatten_f32 (manager: PassManager, mat: Tensor[f32]) {
+    let output = @matrix_flatten[f32](manager, mat);
+
+    print_tensor("Flatten", output);
+
+    output
+}
+
+fn @matrix_reshape[T] (manager: PassManager, mat: Tensor[T], new_shape : (i32, &[i64])) -> Tensor[T] {
+    let new_size_fn = @|n : i32| { new_shape.1(n) };
+
+    let num_dims = new_shape.0;
+
+    let new_access_fn = |n : &[i64]| {
+        let mut address = n(num_dims - 1);
+        for i in unroll(1, num_dims) {
+            address = address * new_size_fn(i - 1) + n(num_dims - 1 - i);
+        }
+        &mut bitcast[&mut[T]](mat.buffer.data)(address)
+    };
+    //let new_access_fn = @|n : &[i64]| {
+    //    //let address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
+    //    //let address = bitcast[&mut[i64]](address_buffer.data);
+    //    let mut address : [i64 * 3];
+
+    //    for i in unroll(0, 1) {
+    //      address(i) = n(i);
+    //    }
+
+    //    let mut r = n(1);
+    //    for i in unroll(1, mat.num_dims) {
+    //      let n = r % mat.size_fn(i);
+    //      address(i) = n;
+    //      r = (r - n) / mat.size_fn(i);
+    //    }
+
+    //    let access = mat.access_fn(address);
+
+    //    //manager.release(address_buffer);
+
+    //    access
+    //};
+
+    Tensor[T] {
+        buffer = mat.buffer,
+        num_dims = num_dims,
+        size_fn = new_size_fn,
+        access_fn = new_access_fn
+    }
+}
+
+#[intern]
+fn @matrix_reshape_f32 (manager: PassManager, mat: Tensor[f32], new_shape: (i32, &[i64])) {
+    let output = @matrix_flatten[f32](manager, mat);
+
+    print_tensor("Reshape", output);
+
+    output
+}
+//fn @matrix_reshape_f32 (manager: PassManager, mat: Tensor[f32], new_shape: (i32, &[i64])) = @matrix_reshape[f32](manager, mat, new_shape);
 
 fn @matrix_softmax (manager: PassManager, mat: Tensor[f32]) {
     let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
@@ -154,13 +534,13 @@ fn @matrix_softmax (manager: PassManager, mat: Tensor[f32]) {
         dims(index) = mat.size_fn(index);
     }
 
-    for instance in multi_loop_vector (manager, mat.num_dims, dims) {
+    for instance in multi_loop (manager, mat.num_dims, dims) {
         let data = math_builtins::exp(*mat.access_fn(instance.index));
         *output.access_fn(instance.index) = data;
         atomic[f32](11, sump, data, 7, "");
     }
 
-    for instance in multi_loop_vector (manager, mat.num_dims, dims) {
+    for instance in multi_loop (manager, mat.num_dims, dims) {
         let data = *output.access_fn(instance.index);
         *output.access_fn(instance.index) = data / sum;
     }
@@ -172,6 +552,48 @@ fn @matrix_softmax (manager: PassManager, mat: Tensor[f32]) {
 
 #[intern]
 fn @matrix_softmax_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_softmax(manager, mat);
+
+fn @matrix_log_softmax (manager: PassManager, mat: Tensor[f32]) {
+    let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
+
+    let mut sum = 0 as f32;
+    //let sump = &mut sum;
+
+    /*let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+    let dims = bitcast[&mut [i64]](dims_buffer.data);
+    for index in range(0, mat.num_dims) {
+        dims(index) = mat.size_fn(index);
+    }
+
+    for instance in multi_loop (manager, mat.num_dims, dims) {
+        let data = math_builtins::exp(*mat.access_fn(instance.index));
+        *output.access_fn(instance.index) = data;
+        //atomic[f32](11, sump, data, 7, "");
+        sum += data;
+    }
+
+    for instance in multi_loop (manager, mat.num_dims, dims) {
+        let data = *output.access_fn(instance.index);
+        *output.access_fn(instance.index) = math_builtins::log(data / sum);
+    }*/
+    for i in range (0, 10) {
+        let data = math_builtins::exp(*mat.access_fn([i as i64]));
+        *output.access_fn([i as i64]) = data;
+        sum += data;
+    }
+
+    for i in range (0, 10) {
+        let data = *output.access_fn([i as i64]);
+        *output.access_fn([i as i64]) = math_builtins::log(data / sum);
+    }
+
+    //manager.release(dims_buffer);
+
+    output
+}
+
+#[intern]
+fn @matrix_log_softmax_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_log_softmax(manager, mat);
 
 fn @matrix_sparsecrossentropy (manager: PassManager, mat: Tensor[f32], expected: i32) -> f32 {
     let index_buffer_buffer = manager.alloc(sizeof[i64]() * 1 as i64);
@@ -188,3 +610,45 @@ fn @matrix_sparsecrossentropy (manager: PassManager, mat: Tensor[f32], expected:
 
 #[intern]
 fn @matrix_sparsecrossentropy_f32 (manager: PassManager, mat: Tensor[f32], expected: i32) = @matrix_sparsecrossentropy(manager, mat, expected);
+
+fn @matrix_crossentropy (manager: PassManager, mat: Tensor[f32], expected: i32) -> f32 {
+    let mut sum = 0 as f32;
+
+    let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+    let dims = bitcast[&mut [i64]](dims_buffer.data);
+    for index in range(0, mat.num_dims) {
+        dims(index) = mat.size_fn(index);
+    }
+
+    for instance in multi_loop (manager, mat.num_dims, dims) {
+        let data = *mat.access_fn(instance.index);
+
+        if instance.index(0) == (expected as i64) { 
+            sum -= math_builtins::log(*mat.access_fn(instance.index));
+        } else {
+            sum += math_builtins::log(*mat.access_fn(instance.index));
+        }
+    }
+
+    sum
+}
+
+#[intern]
+fn @matrix_crossentropy_f32 (manager: PassManager, mat: Tensor[f32], expected: i32) = @matrix_crossentropy(manager, mat, expected);
+
+fn @matrix_nllloss (manager: PassManager, mat: Tensor[f32], expected: i32) -> f32 {
+    let index_buffer_buffer = manager.alloc(sizeof[i64]() * 1 as i64);
+    let index_buffer = bitcast[&mut[i64]](index_buffer_buffer.data);
+
+    index_buffer(0) = expected as i64;
+
+    let r = - (*mat.access_fn(index_buffer));
+
+    manager.release(index_buffer_buffer);
+
+    //r / (mat.size_fn(0) as f32)
+    r
+}
+
+#[intern]
+fn @matrix_nllloss_f32 (manager: PassManager, mat: Tensor[f32], expected: i32) = @matrix_nllloss(manager, mat, expected);

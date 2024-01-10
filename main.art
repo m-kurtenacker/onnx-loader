@@ -2,7 +2,7 @@
 
 #[export]
 fn main () -> i32 {
-    let num_tests = 6000;
+    let num_tests = 1000;
 
     //let data_train = read_train();
     let data_test = read_test();
@@ -11,10 +11,20 @@ fn main () -> i32 {
 
     let mut sum = 0 as f32;
     let mut run_test = 0 as i64;
-    for benchmark_cpu() {
+    //for benchmark_cpu() {
         for i in range(0, num_tests) {
             let image_buffer = data_test(i).image_buffer;
+            //let image_buffer = alloc_cpu(sizeof[f32]() * 28 * 28);
             let image = bitcast[&[f32]](image_buffer.data);
+            //let image = bitcast[&mut [f32]](image_buffer.data);
+            //for i in range(0, 28 * 28) {
+            //    image(i) = 0.0;
+            //}
+
+            //image(100) = 1;
+            //let x = 5;
+            //let y = 3;
+            //image(y * 28 + x) = 1;
 
             let result_data = run_network(image);
 
@@ -26,14 +36,16 @@ fn main () -> i32 {
                     access_fn = @|dims| { &mut (bitcast[&mut[f32]](result_data)(dims(0))) }
                 };
 
-                let softmax_result = @matrix_softmax_f32(manager, result_tensor);
-                sum += @matrix_sparsecrossentropy_f32(manager, softmax_result, data_test(i).label);
+                let log_softmax_result = result_tensor;
+                sum += @matrix_nllloss(manager, log_softmax_result, data_test(i).label);
+                //let softmax_result = @matrix_softmax_f32(manager, result_tensor);
+                //sum += @matrix_sparsecrossentropy_f32(manager, softmax_result, data_test(i).label);
                 run_test += 1;
             }
             //print_i32(i);
             //print_string("\n");
         }
-    }
+    //}
 
     let final_result = sum / (run_test as f32);
 

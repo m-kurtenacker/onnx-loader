@@ -7,10 +7,9 @@
 using namespace ONNX_NAMESPACE;
 
 void load_matrix_dynamic_cpp (float * tensor_buffer, char * file_name, char * matrix_name) {
-    static int i;
-    if (i >= 4)
+    if (tensor_buffer[0] != 0) {
         return;
-    i++;
+    }
 
     const std::string model_path(file_name);
     //std::cerr << "Loading model " << model_path << std::endl;
