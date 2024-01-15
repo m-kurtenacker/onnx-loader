@@ -210,7 +210,7 @@ fn @multi_loop (body: fn(LoopInstance) -> ()) = @|manager: PassManager, num_dims
 fn @multi_loop_vector (body: fn(LoopInstance) -> ()) = @|manager: PassManager, num_dims: i32, n: &[i64]| {
     let instance = make_loopinstance(manager, num_dims, n);
 
-    //static_array_set_element(&instance.mode(0), LoopMode::Vectorized);
+    static_array_set_element(&instance.mode(0), LoopMode::Vectorized);
 
     multi_loop_instanced(body, 0, num_dims, instance);
 };

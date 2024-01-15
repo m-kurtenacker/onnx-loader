@@ -53,7 +53,7 @@ fn @mat_mul_simple (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) 
     };
     let output = @alloc_tensor[f32](manager, num_result_dims, new_size_fn);
 
-    for i in range(0, output.size_fn(0) as i32) {
+    for i in vector_range(0, output.size_fn(0) as i32) {
         let mut sum = 0 as f32;
         for k in range(0, input.size_fn(0) as i32) {
             sum += (*input.access_fn([k as i64])) * (*mat.access_fn([k as i64, i as i64]))
@@ -155,7 +155,7 @@ fn @matrix_convolution (manager: PassManager, input: Tensor[f32], weight: Tensor
     let num_in_chan = input.size_fn(2) as i32;
     let num_out_chan = bias.size_fn(0) as i32;
 
-    for x in range(1, input.size_fn(0) as i32 - 1) {
+    for x in vector_range(1, input.size_fn(0) as i32 - 1) {
         for y in range(1, input.size_fn(1) as i32 - 1) {
             for out_chan in range(0, num_out_chan) {
                 let mut sum = 0 as f32;
@@ -470,51 +470,29 @@ fn @matrix_flatten_f32 (manager: PassManager, mat: Tensor[f32]) {
 }
 
 fn @matrix_reshape[T] (manager: PassManager, mat: Tensor[T], new_shape : (i32, &[i64])) -> Tensor[T] {
-    let new_size_fn = @|n : i32| { new_shape.1(n) };
-
+    let size_fn = @|n : i32| { new_shape.1(n) };
     let num_dims = new_shape.0;
 
+    //TODO: This is a direct mapping to memory, but the input tensor shape might actually be different already!
     let new_access_fn = |n : &[i64]| {
         let mut address = n(num_dims - 1);
-        for i in unroll(1, num_dims) {
-            address = address * new_size_fn(i - 1) + n(num_dims - 1 - i);
+        for i in unroll(0, num_dims - 1) {
+            address = address * size_fn(num_dims - 2 - i) + n(num_dims - 2 - i);
         }
         &mut bitcast[&mut[T]](mat.buffer.data)(address)
     };
-    //let new_access_fn = @|n : &[i64]| {
-    //    //let address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
-    //    //let address = bitcast[&mut[i64]](address_buffer.data);
-    //    let mut address : [i64 * 3];
-
-    //    for i in unroll(0, 1) {
-    //      address(i) = n(i);
-    //    }
-
-    //    let mut r = n(1);
-    //    for i in unroll(1, mat.num_dims) {
-    //      let n = r % mat.size_fn(i);
-    //      address(i) = n;
-    //      r = (r - n) / mat.size_fn(i);
-    //    }
-
-    //    let access = mat.access_fn(address);
-
-    //    //manager.release(address_buffer);
-
-    //    access
-    //};
 
     Tensor[T] {
         buffer = mat.buffer,
         num_dims = num_dims,
-        size_fn = new_size_fn,
+        size_fn = size_fn,
         access_fn = new_access_fn
     }
 }
 
 #[intern]
 fn @matrix_reshape_f32 (manager: PassManager, mat: Tensor[f32], new_shape: (i32, &[i64])) {
-    let output = @matrix_flatten[f32](manager, mat);
+    let output = @matrix_reshape[f32](manager, mat, new_shape);
 
     print_tensor("Reshape", output);
 

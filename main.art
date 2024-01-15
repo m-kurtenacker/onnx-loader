@@ -11,7 +11,7 @@ fn main () -> i32 {
 
     let mut sum = 0 as f32;
     let mut run_test = 0 as i64;
-    //for benchmark_cpu() {
+    for benchmark_cpu() {
         for i in range(0, num_tests) {
             let image_buffer = data_test(i).image_buffer;
             //let image_buffer = alloc_cpu(sizeof[f32]() * 28 * 28);
@@ -45,7 +45,7 @@ fn main () -> i32 {
             //print_i32(i);
             //print_string("\n");
         }
-    //}
+    }
 
     let final_result = sum / (run_test as f32);
 

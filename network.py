@@ -3,16 +3,15 @@ import onnx
 #ONNX_MODEL = "mnist-example/mnist.onnx"
 
 #ONNX_MODEL = "../mnist-example/mnist_linear.onnx"
-#MAGIC_CONST = 784
 
 ONNX_MODEL = "../mnist-example/mnist_cnn.onnx"
-MAGIC_CONST = 576
 
 model = onnx.load(ONNX_MODEL)
 graph = model.graph
 
 from pythorin import *
 
+from IPython import embed
 
 mem_type = ThorinMemType()
 f32_type = ThorinPrimType("qf32")
@@ -47,7 +46,7 @@ access_return_type = ThorinFnType([mem_type, f32_ptr_type])
 
 
 def alloc_tensor(entry_mem, passmanager, finish_cont, dimensions):
-    print("Alloc tensor with", dimensions)
+    #print("Alloc tensor with", dimensions)
     thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), dimensions))
     with ThorinContinuation(size_fn_type, filter=True) as (size_lambda, size_mem, dimension, size_return):
         sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
@@ -151,30 +150,32 @@ with Thorin("network") as network:
 
             def build_node(onnx_node):
                 if onnx_node.op_type == "Constant":
-                    assert(False)
+                    if onnx_node.attribute[0].t.data_type == 6: #i32
+                        const_type = i32_type
+                    elif onnx_node.attribute[0].t.data_type == 7: #i64
+                        const_type = i64_type
+                    else:
+                        assert(False)
+
+                    num_dims = len(onnx_node.attribute[0].t.dims)
+
+                    constants = list(onnx.numpy_helper.to_array(onnx_node.attribute[0].t)[1:])
+                    thorin_constants = list(map(lambda x: ThorinConstant(const_type, int(x)), constants))
+                    thorin_def_array = ThorinDefiniteArray(const_type, thorin_constants)
+
+                    #embed()
+
                     with ThorinContinuation(ThorinFnType([mem_type, ThorinTupleType([i32_type, ThorinPointerType(ThorinIndefiniteArrayType(i64_type))])])) as (return_cont, return_mem, result_tuple):
-                        addr_ptr = ThorinSlot(frame, ThorinDefiniteArrayType(i64_type, 1))
+                        addr_ptr = ThorinSlot(frame, ThorinDefiniteArrayType(i64_type, num_dims))
+                        return_mem = return_mem << (addr_ptr, thorin_def_array)
+
                         addr_ptr_opaque = ThorinBitcast(addr_ptr, ThorinPointerType(ThorinIndefiniteArrayType(i64_type)))
-
-                        return_mem = return_mem << (addr_ptr, ThorinDefiniteArray(i64_type, [ThorinConstant(i64_type, MAGIC_CONST)]))
-
-                        #print("Constant:")
-                        #print(onnx_node)
-
-                        shape_tuple = ThorinTuple([ThorinConstant(i32_type, 1), addr_ptr_opaque]);
+                        shape_tuple = ThorinTuple([ThorinConstant(i32_type, num_dims), addr_ptr_opaque]);
 
                         call_function = lambda in_cont, in_mem: in_cont(return_cont, in_mem, shape_tuple)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
                         update_node = {"result": result_tuple, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tuple)}
-                        nodes.update({onnx_node.output[0] : update_node})
-                        return onnx_node.output[0]
-                elif onnx_node.op_type == "Reshape" or "_view" in onnx_node.op_type:
-                    with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
-                        call_function = lambda in_cont, in_mem: in_cont(mat_flatten, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input[:-1]], return_cont)
-                        return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
-
-                        update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor)}
                         nodes.update({onnx_node.output[0] : update_node})
                         return onnx_node.output[0]
                 else:
@@ -272,20 +273,18 @@ with Thorin("network") as network:
 
             for initializer in graph.initializer:
                 initializer_name = load_initializer(initializer)
-                print("Init:", initializer_name)
+                #print("Init:", initializer_name)
                 ordered_nodes.append(initializer.name)
             for node in graph.node:
-                if node.op_type == "Constant":
-                    continue
                 node_output = build_node(node)
-                print("Node:", node_output)
+                #print("Node:", node_output)
                 required_nodes = node.input
                 unordered_nodes.append((node.output[0], required_nodes))
-                if node_output == output_name:
-                    print("Build end")
-                    break
+                #if node_output == output_name:
+                    #print("Build end")
+                    #break
 
-            print("ordereing")
+            #print("ordereing")
             #TODO: emit nodes based on requirements, no static ordering. This way, we can easily prune nodes.
 
             for node, required in unordered_nodes:
@@ -294,9 +293,6 @@ with Thorin("network") as network:
                 if not local_copy:
                     if input_name in my_required:
                         my_required.remove(input_name)
-                
-                if "_val_12" in required:
-                    my_required.remove("_val_12")
 
                 for i in range(0, len(ordered_nodes)):
                     while ordered_nodes[i] in my_required:
@@ -311,8 +307,8 @@ with Thorin("network") as network:
                     print(my_required)
                     assert(False)
 
-            for n in ordered_nodes:
-                print(n)
+            #for n in ordered_nodes:
+            #    print(n)
 
             for i in range(0, len(ordered_nodes) - 1):
                 link_nodes(nodes[ordered_nodes[i]], nodes[ordered_nodes[i+1]])
