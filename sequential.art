@@ -14,6 +14,8 @@ fn @round_down(n: i32, d: i32) -> i32 {
   (n / d) * d
 }
 
+/* Range functions using vector code */
+
 fn @vector_range(body: fn(i32) -> ()) = @|start: i32, stop: i32| {
     let n = stop - start;
     if vector_width > 0 {
@@ -143,7 +145,14 @@ fn @sub_tensor[T] (manager: PassManager, input : Tensor[T], lower_bounds : &[i64
     }
 }
 
-fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) -> Tensor[T] {
+/* Allocate and Release tensors, with different memory layouts as needed */
+
+enum AllocLayout {
+    RCK,
+    KCR
+}
+
+fn @alloc_tensor_layout[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64, layout : AllocLayout) -> Tensor[T] {
     let mut size = 1 as i64;
     for i in unroll (0, num_dims) {
         size *= size_fn(i);
@@ -151,24 +160,51 @@ fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> 
 
     let buffer = manager.alloc(sizeof[T]() * size);
 
-    let new_access_fn = |n : &[i64]| {
+    let access_fn_rck = |n : &[i64]| {
         let mut address = n(num_dims - 1);
         for i in unroll(0, num_dims - 1) {
             address = address * size_fn(num_dims - 2 - i) + n(num_dims - 2 - i);
         }
         &mut bitcast[&mut[T]](buffer.data)(address)
     };
+
+    let access_fn_kcr = |n : &[i64]| {
+        let mut address = n(0);
+        for i in unroll(1, num_dims) {
+            address = address * size_fn(i) + n(i);
+        }
+        &mut bitcast[&mut[T]](buffer.data)(address)
+    };
+
     Tensor[T] {
         buffer = buffer,
         num_dims = num_dims,
         size_fn = size_fn,
-        access_fn = new_access_fn
+        access_fn = match layout { 
+            AllocLayout::KCR => access_fn_kcr,
+            AllocLayout::RCK => access_fn_rck,
+        }
     }
 }
 
 fn release_tensor[T] (manager: PassManager, mat : Tensor[T]) -> () {
     manager.release(mat.buffer);
 }
+
+//fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) = @alloc_tensor_layout[T](manager, num_dims, size_fn, AllocLayout::KCR);
+fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) -> Tensor[T] {
+    select(num_dims > 1 && size_fn(1) == 12,
+            @alloc_tensor_layout[T](manager, num_dims, size_fn, AllocLayout::RCK),
+            @alloc_tensor_layout[T](manager, num_dims, size_fn, AllocLayout::KCR))
+}
+
+#[intern] fn @alloc_tensor_f32 (manager: PassManager, num_dims: i32, size_fn : fn(i32) -> i64) = @alloc_tensor[f32](manager, num_dims, size_fn);
+//#[intern] fn release_tensor_f32 (manager: PassManager, mat : Tensor[f32]) = release_tensor[f32](manager, mat);
+
+#[intern] fn @alloc_initializer_f32 (manager: PassManager, num_dims: i32, size_fn : fn(i32) -> i64) = @alloc_tensor_layout[f32](manager, num_dims, size_fn, AllocLayout::RCK);
+
+
+/* Multidimensional loops */
 
 enum LoopMode {
     Sequential,
@@ -271,6 +307,8 @@ fn @(?current_dim & ?num_dims) multi_loop_instanced (body: fn(LoopInstance) -> (
     }
 }
 
+/* Main entry point, define the allocation and release of memory */
+
 #[intern]
 fn sequential (body: fn(PassManager) -> ()) = @|| {
     let manager = PassManager {
@@ -280,6 +318,3 @@ fn sequential (body: fn(PassManager) -> ()) = @|| {
     };
     @body(manager);
 };
-
-#[intern] fn @alloc_tensor_f32 (manager: PassManager, num_dims: i32, size_fn : fn(i32) -> i64) = @alloc_tensor[f32](manager, num_dims, size_fn);
-//#[intern] fn release_tensor_f32 (manager: PassManager, mat : Tensor[f32]) = release_tensor[f32](manager, mat);

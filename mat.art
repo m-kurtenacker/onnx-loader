@@ -92,7 +92,7 @@ fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32])
             input_dims(index) = input.size_fn(index);
         }
 
-        for instance in multi_loop_vector (manager, num_result_dims, result_dims) {
+        for instance in multi_loop (manager, num_result_dims, result_dims) {
             let mut sum = 0 as f32;
 
             let matrix_dims_buffer = manager.alloc_dynamic(0, mat.num_dims as i64);
@@ -140,14 +140,12 @@ fn @matrix_convolution (manager: PassManager, input: Tensor[f32], weight: Tensor
        output shape: [ Xo x Yo x out_chan ]
     */
 
-    let new_sizes = [
-            input.size_fn(0) - weight.size_fn(0) + 1 as i64,
-            input.size_fn(1) - weight.size_fn(1) + 1 as i64,
-            bias.size_fn(0)
-    ];
-
     let new_size_fn = @|n : i32| -> i64 {
-        new_sizes(n)
+        if n == 2 {
+            bias.size_fn(0)
+        } else {
+            input.size_fn(n) - weight.size_fn(n) + 1 as i64
+        }
     };
 
     let output = @alloc_tensor[f32](manager, input.num_dims, new_size_fn);
@@ -155,7 +153,7 @@ fn @matrix_convolution (manager: PassManager, input: Tensor[f32], weight: Tensor
     let num_in_chan = input.size_fn(2) as i32;
     let num_out_chan = bias.size_fn(0) as i32;
 
-    for x in vector_range(1, input.size_fn(0) as i32 - 1) {
+    for x in range(1, input.size_fn(0) as i32 - 1) {
         for y in range(1, input.size_fn(1) as i32 - 1) {
             for out_chan in range(0, num_out_chan) {
                 let mut sum = 0 as f32;
@@ -336,6 +334,60 @@ fn @matrix_relu (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
 #[intern]
 fn @matrix_relu_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_relu(manager, mat);
 
+#[export] static mut time_lrn : i64;
+
+fn @matrix_lrn (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
+
+    let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+    let dims = bitcast[&mut [i64]](dims_buffer.data);
+    for index in unroll(0, mat.num_dims) {
+        dims(index) = mat.size_fn(index);
+    }
+
+    for instance in multi_loop (manager, mat.num_dims, dims) {
+        let chan  = instance.index(mat.num_dims - 1) as i32;
+
+        let start = if 0 > chan - 2 { 0 } else { chan - 2 };
+        let stop = if mat.num_dims - 1 < chan + 2 { mat.num_dims - 1 } else { chan + 2 };
+
+        let index_copy_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+        let index_copy = bitcast[&mut [i64]](index_copy_buffer.data);
+
+        index_copy(0) = instance.index(0);
+        index_copy(1) = instance.index(1);
+
+        let mut sqr_sum = 0 : f32;
+
+        for i in range(start, stop + 1) {
+            index_copy(2) = i as i64;
+
+            let elem = *mat.access_fn(index_copy);
+
+            sqr_sum += elem * elem;
+        }
+
+        let alpha = 0.0001 : f32;
+        let beta = 0.75 : f32;
+        let bias = 1 : f32;
+
+        let d = *mat.access_fn(instance.index);
+        let r = d / math_builtins::pow(bias + alpha / 5 * sqr_sum, beta);
+        *output.access_fn(instance.index) = r;
+    }
+
+    manager.release(dims_buffer);
+
+    time_lrn += get_micro_time() - start;
+
+    output
+}
+
+#[intern]
+fn @matrix_lrn_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_lrn(manager, mat);
+
 fn @matrix_dropout (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
     mat
 }
@@ -343,21 +395,26 @@ fn @matrix_dropout (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
 #[intern]
 fn @matrix_dropout_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_dropout(manager, mat);
 
-fn @matrix_max_pool (manager: PassManager, input: Tensor[f32]) -> Tensor[f32] {
+#[export] static mut time_max_pool : i64;
+
+fn @matrix_max_pool (manager: PassManager, input: Tensor[f32], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor[f32] {
+
+    let start = get_micro_time();
 
     //TODO: This only works with a specific kernel shape for now.
 
     /* input shape:  [ X x Y x chan ]
-       output shape: [ X/xk x Y/yk x chan ]
+       ~output shape: [ X/xk x Y/yk x chan ]
     */
 
+    let num_kernel_dims = input.num_dims - 1;
+
     let new_size_fn = @|n : i32| -> i64 {
-        /*if n == 0 {
+        if n == num_kernel_dims {
             input.size_fn(n)
         } else {
-            input.size_fn(n) / 2
-        }*/
-        [12 as i64, 12 as i64, 4 as i64](n)
+            (input.size_fn(n) + 2 * padding(n) - shape(n)) / stride(n) + 1
+        }
     };
 
     let output = @alloc_tensor[f32](manager, input.num_dims, new_size_fn);
@@ -368,52 +425,33 @@ fn @matrix_max_pool (manager: PassManager, input: Tensor[f32]) -> Tensor[f32] {
         output_dims(index) = output.size_fn(index);
     }
 
-    let num_kernel_dims = input.num_dims - 1;
+    for inst_out in multi_loop(manager, output.num_dims, output_dims) {
+        let input_dims_buffer = manager.alloc(sizeof[i64]() * num_kernel_dims as i64);
+        let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
 
-    //let kernel_dims_buffer = manager.alloc_dynamic(1: i64, num_kernel_dims as i64);
-    //let kernel_dims = bitcast[&mut [i64]](kernel_dims_buffer.data);
+        input_dims(num_kernel_dims) = inst_out.index(num_kernel_dims);
 
-    //for inst_out in multi_loop (manager, output.num_dims, output_dims) {
-    for chan in range(0, 4) {
-        for x in range(0, 12) {
-            for y in range(0, 12) {
-        //let chan = inst_out.index(0);
+        let mut max = -99999 : f32; //TODO: -inf
 
-        //let data1 = *input.access_fn([chan, 2 * inst_out.index(1), 2 * inst_out.index(2)]);
-        //let data2 = *input.access_fn([chan, 2 * inst_out.index(1) + 1, 2 * inst_out.index(2)]);
-        //let data3 = *input.access_fn([chan, 2 * inst_out.index(1), 2 * inst_out.index(2) + 1]);
-        //let data4 = *input.access_fn([chan, 2 * inst_out.index(1) + 1, 2 * inst_out.index(2) + 1]);
-
-        let data1 = *input.access_fn([2 * x as i64,     2 * y as i64,     chan as i64]);
-        let data2 = *input.access_fn([2 * x as i64 + 1, 2 * y as i64,     chan as i64]);
-        let data3 = *input.access_fn([2 * x as i64,     2 * y as i64 + 1, chan as i64]);
-        let data4 = *input.access_fn([2 * x as i64 + 1, 2 * y as i64 + 1, chan as i64]);
-
-        let max_1 = math_builtins::fmax(data1, data2);
-        let max_2 = math_builtins::fmax(data3, data4);
-
-        let max = math_builtins::fmax(max_1, max_2);
-
-        //let mut max = -5 : f32;
-
-        /*for inst_kernel in multi_loop (manager, num_kernel_dims, kernel_dims) {
-            let input_index_buffer = manager.alloc_dynamic(0 as i64, input.num_dims as i64);
-            let input_index = bitcast[&mut [i64]](input_index_buffer.data);
-
-            for j in unroll(0, input.num_dims) {
-                if j == 0 {
-                    input_index(j) = chan;
-                } else {
-                    input_index(j) = (2 * inst_out.index(j)) + inst_kernel.index(j);
+        for kernel_instance in multi_loop(manager, num_kernel_dims, shape) {
+            for i in unroll(0, num_kernel_dims) {
+                input_dims(i) = inst_out.index(i) * stride(i) - padding(i) + kernel_instance.index(i);
+                if input_dims(i) < 0 {
+                    input_dims(i) = 0;
+                }
+                if input_dims(i) >= input.size_fn(i) {
+                    input_dims(i) = input.size_fn(i) - 1;
                 }
             }
 
-            max = math_builtins::fmax(max, *input.access_fn(input_index));
-        }*/
+            let data = *input.access_fn(input_dims);
+            max = math_builtins::fmax(max, data);
+        }
 
-        //*output.access_fn(inst_out.index) = max;
-        *output.access_fn([x as i64, y as i64, chan as i64]) = max;
-    } } }
+        *output.access_fn(inst_out.index) = max;
+    }
+
+    time_max_pool += get_micro_time() - start;
 
     print_tensor("MaxPool", output);
 
@@ -421,9 +459,10 @@ fn @matrix_max_pool (manager: PassManager, input: Tensor[f32]) -> Tensor[f32] {
 }
 
 #[intern]
-fn @matrix_max_pool_f32 (manager: PassManager, input: Tensor[f32]) = @matrix_max_pool(manager, input);
+fn @matrix_max_pool_f32 (manager: PassManager, input: Tensor[f32], shape: &[i64], stride: &[i64], padding: &[i64]) = @matrix_max_pool(manager, input, shape, stride, padding);
 
 fn @matrix_flatten[T] (manager: PassManager, mat: Tensor[T]) -> Tensor[T] {
+    //TODO: probably broken.
     let mut size = 1 as i64;
     for i in unroll (0, mat.num_dims) {
         size *= mat.size_fn(i);
@@ -475,11 +514,24 @@ fn @matrix_reshape[T] (manager: PassManager, mat: Tensor[T], new_shape : (i32, &
 
     //TODO: This is a direct mapping to memory, but the input tensor shape might actually be different already!
     let new_access_fn = |n : &[i64]| {
+        //Build a "linear" address with regards to the new shape.
         let mut address = n(num_dims - 1);
         for i in unroll(0, num_dims - 1) {
             address = address * size_fn(num_dims - 2 - i) + n(num_dims - 2 - i);
         }
-        &mut bitcast[&mut[T]](mat.buffer.data)(address)
+
+        //Unpack the address into an addressing vector for the old matrix.
+        let oldworld_address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
+        let oldworld_address = bitcast[&mut [i64]](oldworld_address_buffer.data);
+
+        for i in unroll(0, mat.num_dims) {
+            let index = address % mat.size_fn(i);
+            oldworld_address(i) = index;
+
+            address = address / mat.size_fn(i);
+        }
+
+        mat.access_fn(oldworld_address)
     };
 
     Tensor[T] {

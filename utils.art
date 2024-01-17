@@ -56,7 +56,9 @@ fn @benchmark_cpu(body: fn() -> ()) = @||                 total_cpu_timing    +=
 #[export] static mut time_mut = 0 : i64;
 #[export] static mut time_add = 0 : i64;
 #[export] static mut time_relu = 0 : i64;
+#[export] static mut time_lrn = 0 : i64;
 #[export] static mut time_conv = 0 : i64;
+#[export] static mut time_max_pool = 0 : i64;
 
 fn print_total_timing() -> () {
     print_string("Total timing for cpu / kernel: ");
@@ -79,6 +81,14 @@ fn print_total_timing() -> () {
 
     print_string("Total timing for matrix_relu: ");
     print_f64(time_relu as f64 / 1000.0);
+    print_string(" ms\n");
+
+    print_string("Total timing for matrix_lrn: ");
+    print_f64(time_lrn as f64 / 1000.0);
+    print_string(" ms\n");
+
+    print_string("Total timing for matrix_max_pool: ");
+    print_f64(time_max_pool as f64 / 1000.0);
     print_string(" ms\n");
 }
 
