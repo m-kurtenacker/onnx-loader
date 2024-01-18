@@ -347,11 +347,13 @@ fn @matrix_lrn (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
         dims(index) = mat.size_fn(index);
     }
 
+    let num_chan = mat.size_fn(mat.num_dims - 1) as i32;
+
     for instance in multi_loop (manager, mat.num_dims, dims) {
         let chan  = instance.index(mat.num_dims - 1) as i32;
 
         let start = if 0 > chan - 2 { 0 } else { chan - 2 };
-        let stop = if mat.num_dims - 1 < chan + 2 { mat.num_dims - 1 } else { chan + 2 };
+        let stop = if num_chan - 1 < chan + 2 { num_chan - 1 } else { chan + 2 };
 
         let index_copy_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
         let index_copy = bitcast[&mut [i64]](index_copy_buffer.data);
@@ -371,7 +373,7 @@ fn @matrix_lrn (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
 
         let alpha = 0.0001 : f32;
         let beta = 0.75 : f32;
-        let bias = 1 : f32;
+        let bias = 1 : f32; // == k in pytorch
 
         let d = *mat.access_fn(instance.index);
         let r = d / math_builtins::pow(bias + alpha / 5 * sqr_sum, beta);
