@@ -1,0 +1,55 @@
+#[export] static mut time_lrn : i64;
+
+fn @matrix_lrn (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
+
+    let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+    let dims = bitcast[&mut [i64]](dims_buffer.data);
+    for index in unroll(0, mat.num_dims) {
+        dims(index) = mat.size_fn(index);
+    }
+
+    let num_chan = mat.size_fn(mat.num_dims - 1) as i32;
+
+    for instance in multi_loop (manager, mat.num_dims, dims) {
+        let chan  = instance.index(mat.num_dims - 1) as i32;
+
+        let start = if 0 > chan - 2 { 0 } else { chan - 2 };
+        let stop = if num_chan - 1 < chan + 2 { num_chan - 1 } else { chan + 2 };
+
+        let index_copy_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+        let index_copy = bitcast[&mut [i64]](index_copy_buffer.data);
+
+        index_copy(0) = instance.index(0);
+        index_copy(1) = instance.index(1);
+
+        let mut sqr_sum = 0 : f32;
+
+        for i in range(start, stop + 1) {
+            index_copy(2) = i as i64;
+
+            let elem = *mat.access_fn(index_copy);
+
+            sqr_sum += elem * elem;
+        }
+
+        let alpha = 0.0001 : f32;
+        let beta = 0.75 : f32;
+        let bias = 1 : f32; // == k in pytorch
+
+        let d = *mat.access_fn(instance.index);
+        let r = d / math_builtins::pow(bias + alpha / 5 * sqr_sum, beta);
+        *output.access_fn(instance.index) = r;
+    }
+
+    manager.release(dims_buffer);
+
+    time_lrn += get_micro_time() - start;
+
+    output
+}
+
+#[intern]
+fn @matrix_lrn_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_lrn(manager, mat);

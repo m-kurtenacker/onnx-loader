@@ -1,0 +1,46 @@
+fn @matrix_flatten[T] (manager: PassManager, mat: Tensor[T]) -> Tensor[T] {
+    //TODO: probably broken.
+    let mut size = 1 as i64;
+    for i in unroll (0, mat.num_dims) {
+        size *= mat.size_fn(i);
+    }
+    let new_size_fn = @|_n : i32| { size };
+
+    let new_access_fn = @|n : &[i64]| {
+        //let mut r = n(0);
+
+        //let address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
+        //let address = bitcast[&mut[i64]](address_buffer.data);
+        //let mut address : [i64 * 2];
+
+        //for i in unroll(0, mat.num_dims) {
+            //let n = r % mat.size_fn(i);
+            //address(i) = n;
+            //r = (r - n) / mat.size_fn(i);
+        //}
+
+        //let access = mat.access_fn(address);
+
+        //manager.release(address_buffer);
+
+        //access
+
+        &mut (bitcast[&mut[T]](mat.buffer.data)(n(0)))
+    };
+
+    Tensor[T] {
+        buffer = mat.buffer,
+        num_dims = 1,
+        size_fn = new_size_fn,
+        access_fn = new_access_fn
+    }
+}
+
+#[intern]
+fn @matrix_flatten_f32 (manager: PassManager, mat: Tensor[f32]) {
+    let output = @matrix_flatten[f32](manager, mat);
+
+    print_tensor("Flatten", output);
+
+    output
+}

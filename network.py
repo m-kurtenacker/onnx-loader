@@ -2,7 +2,8 @@ import onnx
 
 #ONNX_MODEL = "mnist-example/mnist.onnx"
 #ONNX_MODEL = "../mnist-example/mnist_linear.onnx"
-ONNX_MODEL = "../mnist-example/mnist_cnn.onnx"
+#ONNX_MODEL = "../mnist-example/mnist_cnn.onnx"
+ONNX_MODEL = "../onnx-models/onnx-model-zoo/validated/vision/body_analysis/age_gender/models/gender_googlenet.onnx"
 
 model = onnx.load(ONNX_MODEL)
 graph = model.graph
@@ -105,11 +106,15 @@ with Thorin("network") as network:
     mat_reshape = network.find_imported_def("matrix_reshape_f32")
     mat_conv = network.find_imported_def("matrix_convolution_f32")
     mat_max_pool = network.find_imported_def("matrix_max_pool_f32")
+    mat_avg_pool = network.find_imported_def("matrix_avg_pool_f32")
     mat_dropout = network.find_imported_def("matrix_dropout_f32")
+
+    mat_concat = network.find_imported_def("matrix_concat4_f32")
 
     #Define types for imported continuations. Only needed for printing.
     sequential.type = ThorinFnType([mem_type, body_type], ThorinFnType([mem_type], True))
     alloc_tensor_thorin.type = ThorinFnType([mem_type, passmanager_type, i32_type, size_fn_type], tensor_type)
+    alloc_initializer_thorin.type = ThorinFnType([mem_type, passmanager_type, i32_type, size_fn_type], tensor_type)
     load_matrix.type = ThorinFnType([mem_type, tensor_type, string_type, string_type], ThorinFnType([mem_type], True))
     mat_flatten.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
     mat_mul.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
@@ -120,7 +125,14 @@ with Thorin("network") as network:
     mat_log_softmax.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
     mat_dropout.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
     mat_max_pool.type = ThorinFnType([mem_type, passmanager_type, tensor_type, i64_arr_type, i64_arr_type, i64_arr_type], tensor_type)
+    mat_avg_pool.type = ThorinFnType([mem_type, passmanager_type, tensor_type, i64_arr_type, i64_arr_type, i64_arr_type], tensor_type)
+    mat_lrn.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
     mat_conv.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type], tensor_type)
+
+    mat_concat.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type, tensor_type], tensor_type)
+
+    #mat_reshape.type = ThorinFnType([mem_type, passmanager_type, tensor_type, ThorinTupleType([i32_type, i64_arr_type])], tensor_type)
+    mat_reshape.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
 
     with ThorinContinuation(network_exec_type, internal="run_network", thorin=network) as (run_network, run_network_mem, image, ret_function):
         run_network_mem, frame = thorinEnterExtract(run_network_mem)
@@ -148,7 +160,13 @@ with Thorin("network") as network:
                     return mat_conv
                 elif onnx_node.op_type == "MaxPool" or "max_pool" in onnx_node.op_type:
                     return mat_max_pool
+                elif onnx_node.op_type == "AveragePool" or "avg_pool" in onnx_node.op_type:
+                    return mat_avg_pool
                 elif onnx_node.op_type == "Dropout" or "dropout" in onnx_node.op_type:
+                    return mat_dropout
+                elif onnx_node.op_type == "Concat" or "SequenceConstruct" in onnx_node.op_type:
+                    return mat_concat
+                elif "aten_cat" in onnx_node.op_type:
                     return mat_dropout
                 else:
                     print("op unknown:", onnx_node.op_type, "at", onnx_node.name)
@@ -182,11 +200,11 @@ with Thorin("network") as network:
                     thorin_constants = list(map(lambda x: ThorinConstant(const_type, int(x)), constants))
                     thorin_def_array = ThorinDefiniteArray(const_type, thorin_constants)
 
-                    with ThorinContinuation(ThorinFnType([mem_type, ThorinTupleType([i32_type, ThorinPointerType(ThorinIndefiniteArrayType(i64_type))])])) as (return_cont, return_mem, result_tuple):
+                    with ThorinContinuation(ThorinFnType([mem_type, ThorinTupleType([i32_type, i64_arr_type])])) as (return_cont, return_mem, result_tuple):
                         addr_ptr = ThorinSlot(frame, ThorinDefiniteArrayType(i64_type, num_dims))
                         return_mem = return_mem << (addr_ptr, thorin_def_array)
 
-                        addr_ptr_opaque = ThorinBitcast(addr_ptr, ThorinPointerType(ThorinIndefiniteArrayType(i64_type)))
+                        addr_ptr_opaque = ThorinBitcast(addr_ptr, i64_arr_type)
                         shape_tuple = ThorinTuple([ThorinConstant(i32_type, num_dims), addr_ptr_opaque]);
 
                         call_function = lambda in_cont, in_mem: in_cont(return_cont, in_mem, shape_tuple)
@@ -195,7 +213,7 @@ with Thorin("network") as network:
                         update_node = {"result": result_tuple, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tuple)}
                         nodes.update({onnx_node.output[0] : update_node})
                         return onnx_node.output[0]
-                elif onnx_node.op_type == "MaxPool" or "max_pool" in onnx_node.op_type:
+                elif onnx_node.op_type == "MaxPool" or "max_pool" in onnx_node.op_type or onnx_node.op_type == "AveragePool":
                     shape = []
                     strides = []
                     padding = []

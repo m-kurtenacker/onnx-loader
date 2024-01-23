@@ -1,0 +1,63 @@
+#[export] static mut time_max_pool : i64;
+
+fn @matrix_max_pool (manager: PassManager, input: Tensor[f32], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor[f32] {
+
+    let start = get_micro_time();
+
+    /* input shape:  [ X x Y x chan ]
+       ~output shape: [ X/xk x Y/yk x chan ]
+    */
+
+    let num_kernel_dims = input.num_dims - 1;
+
+    let new_size_fn = @|n : i32| -> i64 {
+        if n == num_kernel_dims {
+            input.size_fn(n)
+        } else {
+            (input.size_fn(n) + 2 * padding(n) - shape(n)) / stride(n) + 1
+        }
+    };
+
+    let output = @alloc_tensor[f32](manager, input.num_dims, new_size_fn);
+
+    let output_dims_buffer = manager.alloc(sizeof[i64]() * output.num_dims as i64);
+    let output_dims = bitcast[&mut [i64]](output_dims_buffer.data);
+    for index in unroll(0, input.num_dims) {
+        output_dims(index) = output.size_fn(index);
+    }
+
+    for inst_out in multi_loop(manager, output.num_dims, output_dims) {
+        let input_dims_buffer = manager.alloc(sizeof[i64]() * num_kernel_dims as i64);
+        let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
+
+        input_dims(num_kernel_dims) = inst_out.index(num_kernel_dims);
+
+        let mut max = - (1.0 : f32) / (0.0 : f32); // == -inf in normal floating point math.
+
+        for kernel_instance in multi_loop(manager, num_kernel_dims, shape) {
+            for i in unroll(0, num_kernel_dims) {
+                input_dims(i) = inst_out.index(i) * stride(i) - padding(i) + kernel_instance.index(i);
+                if input_dims(i) < 0 {
+                    input_dims(i) = 0;
+                }
+                if input_dims(i) >= input.size_fn(i) {
+                    input_dims(i) = input.size_fn(i) - 1;
+                }
+            }
+
+            let data = *input.access_fn(input_dims);
+            max = math_builtins::fmax(max, data);
+        }
+
+        *output.access_fn(inst_out.index) = max;
+    }
+
+    time_max_pool += get_micro_time() - start;
+
+    print_tensor("MaxPool", output);
+
+    output
+}
+
+#[intern]
+fn @matrix_max_pool_f32 (manager: PassManager, input: Tensor[f32], shape: &[i64], stride: &[i64], padding: &[i64]) = @matrix_max_pool(manager, input, shape, stride, padding);

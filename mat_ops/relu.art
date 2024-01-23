@@ -1,0 +1,28 @@
+#[export] static mut time_relu : i64;
+
+fn @matrix_relu (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
+
+    let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+    let dims = bitcast[&mut [i64]](dims_buffer.data);
+    for index in unroll(0, mat.num_dims) {
+        dims(index) = mat.size_fn(index);
+    }
+
+    for instance in multi_loop (manager, mat.num_dims, dims) {
+        let d = *mat.access_fn(instance.index);
+        let r = if d < 0 { 0 as f32 } else { d };
+        *output.access_fn(instance.index) = r;
+    }
+
+    manager.release(dims_buffer);
+
+    time_relu += get_micro_time() - start;
+
+    output
+}
+
+#[intern]
+fn @matrix_relu_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_relu(manager, mat);

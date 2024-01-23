@@ -1,0 +1,14 @@
+#[intern]
+fn @matrix_gemm_f32 (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32]) {
+    print_tensor("Gemm input", input);
+    
+    let mult_result = @matrix_multiply(manager, weight, input);
+
+    print_tensor("Gemm inter", mult_result);
+
+    let output = @matrix_add(manager, bias, mult_result);
+
+    print_tensor("Gemm", output);
+
+    output
+}

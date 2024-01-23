@@ -53,7 +53,7 @@ fn @benchmark_cpu(body: fn() -> ()) = @||                 total_cpu_timing    +=
 
 //fn @is_gpu() -> bool { is_nvvm() | is_cuda() | is_opencl() | is_amdgpu() }
 
-#[export] static mut time_mut = 0 : i64;
+#[export] static mut time_mul = 0 : i64;
 #[export] static mut time_add = 0 : i64;
 #[export] static mut time_relu = 0 : i64;
 #[export] static mut time_lrn = 0 : i64;
@@ -68,7 +68,7 @@ fn print_total_timing() -> () {
     print_string(" ms\n");
 
     print_string("Total timing for matrix_mut: ");
-    print_f64(time_mut as f64 / 1000.0);
+    print_f64(time_mul as f64 / 1000.0);
     print_string(" ms\n");
 
     print_string("Total timing for matrix_conv: ");

@@ -39,7 +39,7 @@ plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp plugin/build
 plugin/build/loader_runtime.so: plugin/load_runtime.cpp plugin/build
 	@make -C plugin/build all
 
-main.thorin.json: main.art read.art utils.art sequential.art mat.art
+main.thorin.json: main.art read.art utils.art sequential.art mat.art mat_ops/*.art
 	artic \
 		${RUNTIME} \
 		$^ \
@@ -60,7 +60,7 @@ main-compiled.thorin.json: main.thorin.json plugin/build/loader.so
 		--log-level ${LOG_LEVEL} \
 		-o main-compiled
 
-network-tools.thorin.json: sequential.art mat.art
+network-tools.thorin.json: sequential.art mat.art mat_ops/*.art
 	artic \
 		${RUNTIME} \
 		$^ \

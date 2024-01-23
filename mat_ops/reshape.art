@@ -1,0 +1,56 @@
+fn @matrix_reshape[T] (manager: PassManager, mat: Tensor[T], new_shape : (i32, &[i64])) -> Tensor[T] {
+    let size_fn = @|n : i32| { new_shape.1(n) };
+    let num_dims = new_shape.0;
+
+    //TODO: This is a direct mapping to memory, but the input tensor shape might actually be different already!
+    let new_access_fn = |n : &[i64]| {
+        //Build a "linear" address with regards to the new shape.
+        let mut address = n(num_dims - 1);
+        for i in unroll(0, num_dims - 1) {
+            address = address * size_fn(num_dims - 2 - i) + n(num_dims - 2 - i);
+        }
+
+        //Unpack the address into an addressing vector for the old matrix.
+        let oldworld_address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
+        let oldworld_address = bitcast[&mut [i64]](oldworld_address_buffer.data);
+
+        for i in unroll(0, mat.num_dims) {
+            let index = address % mat.size_fn(i);
+            oldworld_address(i) = index;
+
+            address = address / mat.size_fn(i);
+        }
+
+        mat.access_fn(oldworld_address)
+    };
+
+    Tensor[T] {
+        buffer = mat.buffer,
+        num_dims = num_dims,
+        size_fn = size_fn,
+        access_fn = new_access_fn
+    }
+}
+
+#[intern]
+fn @matrix_reshape_const_f32 (manager: PassManager, mat: Tensor[f32], new_shape: (i32, &[i64])) {
+    let output = @matrix_reshape[f32](manager, mat, new_shape);
+
+    print_tensor("Reshape", output);
+
+    output
+}
+
+#[intern]
+fn @matrix_reshape_f32 (manager: PassManager, mat: Tensor[f32], new_shape_tensor: Tensor[f32]) {
+    let mut new_shape : (i32, &[i64]);
+
+    new_shape.0 = 1;
+    new_shape.1 = [1024];
+
+    let output = @matrix_reshape[f32](manager, mat, new_shape);
+
+    print_tensor("Reshape", output);
+
+    output
+}

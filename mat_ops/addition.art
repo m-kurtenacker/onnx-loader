@@ -1,0 +1,57 @@
+#[export] static mut time_add : i64;
+
+fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    let output = @alloc_tensor[f32](manager, matA.num_dims, matA.size_fn);
+
+    let dims_buffer = manager.alloc(sizeof[i64]() * matA.num_dims as i64);
+    let dims = bitcast[&mut [i64]](dims_buffer.data);
+    for index in unroll(0, matA.num_dims) {
+        dims(index) = matA.size_fn(index);
+    }
+
+    for instance in multi_loop (manager, matA.num_dims, dims) {
+        let A = *matA.access_fn(instance.index);
+        let B = *matB.access_fn(instance.index);
+
+        *output.access_fn(instance.index) = A + B;
+    }
+
+    manager.release(dims_buffer);
+
+    time_add += get_micro_time() - start;
+
+    output
+}
+
+fn @matrix_sub (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    let output = @alloc_tensor[f32](manager, matA.num_dims, matA.size_fn);
+
+    let dims_buffer = manager.alloc(sizeof[i64]() * matA.num_dims as i64);
+    let dims = bitcast[&mut [i64]](dims_buffer.data);
+    for index in unroll(0, matA.num_dims) {
+        dims(index) = matA.size_fn(index);
+    }
+
+    for instance in multi_loop (manager, matA.num_dims, dims) {
+        let A = *matA.access_fn(instance.index);
+        let B = *matB.access_fn(instance.index);
+
+        *output.access_fn(instance.index) = A - B;
+    }
+
+    manager.release(dims_buffer);
+
+    time_add += get_micro_time() - start;
+
+    output
+}
+
+#[intern]
+fn @matrix_add_f32 (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) = @matrix_add(manager, matA, matB);
+
+#[intern]
+fn @matrix_sub_f32 (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32]) = @matrix_sub(manager, matA, matB);
