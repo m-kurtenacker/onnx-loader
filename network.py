@@ -16,6 +16,9 @@ except ImportError:
     print("Importing IPython failed.")
     print("Install with ./venv/bin/pip install ipython")
 
+import sys
+sys.setrecursionlimit(5000)
+
 #Setup all types that are required in the network execution stack
 mem_type = ThorinMemType()
 f32_type = ThorinPrimType("qf32")
