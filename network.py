@@ -1,6 +1,6 @@
 import onnx
 
-#ONNX_MODEL = "mnist-example/mnist.onnx"
+#ONNX_MODEL = "../mnist-example/mnist.onnx"
 #ONNX_MODEL = "../mnist-example/mnist_linear.onnx"
 #ONNX_MODEL = "../mnist-example/mnist_cnn.onnx"
 ONNX_MODEL = "../onnx-models/onnx-model-zoo/validated/vision/body_analysis/age_gender/models/gender_googlenet.onnx"
