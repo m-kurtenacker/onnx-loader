@@ -1,0 +1,6 @@
+//TODO: Move to library
+fn @matrix_dropout (manager: PassManager, mat: Tensor[f32]) -> Tensor[f32] {
+    mat
+}
+#[intern]
+fn @matrix_dropout_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_dropout(manager, mat);

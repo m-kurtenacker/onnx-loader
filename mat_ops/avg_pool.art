@@ -10,7 +10,7 @@ fn @matrix_avg_pool (manager: PassManager, input: Tensor[f32], shape: &[i64], st
 
     let new_size_fn = @|n : i32| -> i64 {
         if n == num_kernel_dims {
-            input.size_fn(n)
+            input.size_fn(num_kernel_dims)
         } else {
             (input.size_fn(n) + 2 * padding(n) - shape(n)) / stride(n) + 1
         }

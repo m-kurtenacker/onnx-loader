@@ -1,5 +1,64 @@
 #[export] static mut time_conv : i64;
 
+fn @matrix_convolution_padded (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], stride: &[i64], padding: &[i64]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    /* input shape:  [ X x Y x in_chan ]
+       weight shape: [ Xk x Yk x in_chan x out_chan ]
+       bias shape:   [ out_chan ]
+       output shape: [ Xo x Yo x out_chan ]
+    */
+
+    let new_size_fn = @|n : i32| -> i64 {
+        if n == 2 {
+            bias.size_fn(0)
+        } else {
+            (input.size_fn(n) + 2 * padding(n) - weight.size_fn(n)) / stride(n) + 1
+        }
+    };
+
+    let output = @alloc_tensor[f32](manager, input.num_dims, new_size_fn);
+
+    let num_in_chan = input.size_fn(2) as i32;
+    let num_out_chan = bias.size_fn(0) as i32;
+
+    let kern_radius = (weight.size_fn(0) / 2) as i32;
+
+    for x in range(kern_radius, input.size_fn(0) as i32 - kern_radius) {
+        for y in range(kern_radius, input.size_fn(1) as i32 - kern_radius) {
+            for out_chan in range(0, num_out_chan) {
+                let mut sum = 0 as f32;
+
+                for in_chan in range(0, num_in_chan) {
+                    for xk in range(- kern_radius, kern_radius + 1) {
+                        for yk in range(- kern_radius, kern_radius + 1) {
+                            let data = *input.access_fn([(x + xk) as i64, (y + yk) as i64, in_chan as i64]);
+                            let weight = *weight.access_fn([(xk + kern_radius) as i64, (yk + kern_radius) as i64, in_chan as i64, out_chan as i64]);
+
+                            sum += data * weight;
+                        }
+                    }
+                }
+
+                sum += *bias.access_fn([out_chan as i64]);
+
+                //sum = out_chan as f32 + x as f32 * 0.01 + y as f32 * 0.0001;
+
+                *output.access_fn([(x - kern_radius) as i64, (y - kern_radius) as i64, out_chan as i64]) = sum;
+            }
+        }
+    }
+
+    time_conv += get_micro_time() - start;
+
+    print_tensor("Convolution", output);
+
+    output
+}
+
+#[intern]
+fn @matrix_convolution_padded_f32 (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], stride: &[i64], padding: &[i64]) = @matrix_convolution_padded(manager, input, weight, bias, stride, padding);
+
 fn @matrix_convolution (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32]) -> Tensor[f32] {
     if input.size_fn(1) == 28 {
         print_tensor("Input", input);

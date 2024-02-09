@@ -266,11 +266,18 @@ with Thorin("network") as network:
 
             unordered_nodes = []
             ordered_nodes = []
+            initializer_nodes = []
 
             input_name = graph.input[0].name
+
             output_name = graph.output[0].name
-            #output_name = "relu_1"
-            #output_name = "conv1_1"
+            #output_name = "conv1/7x7_s2_Y"
+            #output_name = "conv2/norm2_Y"
+            #output_name = "pool2/3x3_s2_Y"
+            #output_name = "inception_3a/output_Y"
+            #output_name = "inception_5b/output_Y"
+
+            image_dims = [224, 224, 3]
 
             local_copy = False
             if local_copy:
@@ -279,7 +286,7 @@ with Thorin("network") as network:
 
                 def rangeX_body(entry_block, mem, indexX, continueX_block):
                     def rangeY_body(entry_block, mem, indexY, continueY_block):
-                        image_x_y_ptr = ThorinLEA([image, indexY * 28 + indexX])
+                        image_x_y_ptr = ThorinLEA([image, indexY * image_dims[0] + indexX])
 
                         #mem, frame = thorinEnterExtract(mem)
                         addr_ptr = ThorinSlot(frame, ThorinDefiniteArrayType(i64_type, 3))
@@ -300,22 +307,21 @@ with Thorin("network") as network:
                     def rangeY_return(return_block, mem):
                         return_block(continueX_block, mem)
 
-                    entry_block(*thorinRangeFn(mem, 0, 28, 1, rangeY_body, rangeY_return))
+                    entry_block(*thorinRangeFn(mem, 0, image_dims[0], 1, rangeY_body, rangeY_return))
 
                 def rangeX_return(return_block, mem):
                     global alloc_block
                     alloc_block = (return_block, mem, tensorImage)
 
-                allocImage_continue(*thorinRangeFn(allocImage_mem, 0, 28, 1, rangeX_body, rangeX_return))
+                allocImage_continue(*thorinRangeFn(allocImage_mem, 0, image_dims[1], 1, rangeX_body, rangeX_return))
 
                 nodes[input_name] = {"result": tensorImage,
-                                     "call": lambda in_cont, in_mem: in_cont(*alloc_tensor(in_mem, passmanager, allocImage_continue, [28, 28, 1])),
+                                     "call": lambda in_cont, in_mem: in_cont(*alloc_tensor(in_mem, passmanager, allocImage_continue, image_dims)),
                                      "cont": lambda out_cont, *out_param: alloc_block[0](out_cont, alloc_block[1], *out_param),
                                      "block": alloc_block}
 
                 ordered_nodes.append(input_name)
             else:
-                image_dims = [28, 28, 1]
                 num_image_dims = len(image_dims)
                 with ThorinContinuation(size_fn_type, filter=True) as (size_lambda, size_mem, index, size_return):
                     thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), image_dims))
@@ -333,60 +339,121 @@ with Thorin("network") as network:
                     access_mem, y = access_mem >> y_ptr
                     #access_mem, chan = access_mem >> chan_ptr
 
-                    #image_chan_x_y_ptr = ThorinLEA([image, chan * ThorinConstant(i64_type, 28*28) + y * ThorinConstant(i64_type, 28) + x])
-                    image_x_y_ptr = ThorinLEA([image, y * ThorinConstant(i64_type, 28) + x])
+                    #image_chan_x_y_ptr = ThorinLEA([image, chan * ThorinConstant(i64_type, image_dims[0]*image_dims[1]) + y * ThorinConstant(i64_type, image_dims[0]) + x])
+                    image_x_y_ptr = ThorinLEA([image, y * ThorinConstant(i64_type, image_dims[0]) + x])
 
                     access_lambda(access_return, access_mem, image_x_y_ptr)
                 image_buffer = ThorinStruct(buffer_type, [ThorinBitcast(image, iarrptr_type), ThorinConstant(i64_type, 0), ThorinConstant(i32_type, 0)])
                 tensorImage = ThorinStruct(tensor_type, [image_buffer, ThorinConstant(i32_type, num_image_dims), size_lambda, access_lambda])
                 nodes[input_name] = {"result": tensorImage}
 
+            #num_initializers = 0
             num_initializers = len(graph.initializer)
 
-            for initializer in graph.initializer:
-                initializer_name = load_initializer(initializer)
-                #print("Init:", initializer_name)
-                ordered_nodes.append(initializer.name)
-            for node in graph.node:
-                node_output = build_node(node)
-                #print("Node:", node_output)
-                required_nodes = node.input
-                unordered_nodes.append((node.output[0], required_nodes))
-                #if node_output == output_name:
-                    #print("Build end")
-                    #break
+            if True:
+                for initializer in graph.initializer:
+                    initializer_name = load_initializer(initializer)
+                    #initializer_nodes.append(initializer.name)
+                    ordered_nodes.append(initializer.name)
+                for node in graph.node:
+                    node_output = build_node(node)
+                    required_nodes = node.input
+                    unordered_nodes.append((node.output[0], required_nodes))
 
-            #print("ordereing")
+                for node, required in unordered_nodes:
+                    my_required = list(required)
+
+                    if not local_copy:
+                        if input_name in my_required:
+                            my_required.remove(input_name)
+
+                    for node_init in initializer_nodes:
+                        if node_init in my_required:
+                            ordered_nodes.insert(0, node_init)
+                            num_initializers += 1
+
+                    for node_known in ordered_nodes:
+                        while node_known in initializer_nodes:
+                            initializer_nodes.remove(node_known)
+
+                    for i in range(0, len(ordered_nodes)):
+                        while ordered_nodes[i] in my_required:
+                            my_required.remove(ordered_nodes[i])
+                        if my_required == []:
+                            insert_index = i + 1
+                            if insert_index < num_initializers:
+                                insert_index = num_initializers
+                            ordered_nodes.insert(insert_index, node)
+                            break
+                    else:
+                        print(ordered_nodes)
+                        print(my_required)
+                        assert(False)
+
+                    if node == output_name:
+                        print("Added output node to ordered_nodes, finished")
+                        break;
+            else:
+                todo = [output_name]
+                initializer_index = 0
+
+                graph_node_names = []
+                for node in graph.node:
+                    graph_node_names.append(node.output[0])
+                initializer_node_names = []
+                for node in graph.initializer:
+                    initializer_node_names.append(node.name)
+
+                print("Graph:", graph_node_names)
+                print("Init:", initializer_node_names)
+
+                while not todo == []:
+                    node = todo.pop()
+
+                    print(node)
+
+                    if node in graph_node_names:
+                        index = graph_node_names.index(node)
+                        onnx_node = graph.node[index]
+
+                        node_output = build_node(onnx_node)
+                        ordered_nodes.insert(initializer_index, node)
+
+                        required_nodes = list(onnx_node.input)
+
+                        for req_node in required_nodes:
+                            if(req_node in ordered_nodes):
+                                print("Error")
+                                print(req_node)
+                            assert(req_node not in ordered_nodes)
+
+                            if req_node in todo:
+                                todo.remove(req_node)
+
+                        for req_node in required_nodes:
+                            todo.insert(0, req_node)
+
+                    elif node in initializer_node_names:
+                        index = initializer_node_names.index(node)
+                        onnx_node = graph.initializer[index]
+
+                        initializer_name = load_initializer(onnx_node)
+                        ordered_nodes.insert(initializer_index, node)
+                        initializer_index += 1
+
+                    else:
+                        assert(False)
+
             #TODO: emit nodes based on requirements, no static ordering. This way, we can easily prune nodes.
-
-            for node, required in unordered_nodes:
-                my_required = list(required)
-
-                if not local_copy:
-                    if input_name in my_required:
-                        my_required.remove(input_name)
-
-                for i in range(0, len(ordered_nodes)):
-                    while ordered_nodes[i] in my_required:
-                        my_required.remove(ordered_nodes[i])
-                    if my_required == []:
-                        insert_index = i + 1
-                        if insert_index < num_initializers:
-                            insert_index = num_initializers
-                        ordered_nodes.insert(insert_index, node)
-                        break
-                else:
-                    print(my_required)
-                    assert(False)
-
-            #for n in ordered_nodes:
-            #    print(n)
+            print("ordereing")
+            for n in ordered_nodes:
+                print(n)
 
             for i in range(0, len(ordered_nodes) - 1):
                 link_nodes(nodes[ordered_nodes[i]], nodes[ordered_nodes[i+1]])
-                #if ordered_nodes[i] == output_name:
-                #    print("Link end")
-                #    break
+                if ordered_nodes[i+1] == output_name:
+                    print("Emitted link to output node, everything else is not needed.")
+                    break
 
             #Execute entry
             nodes[ordered_nodes[0]]["call"](body_fn, body_mem)

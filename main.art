@@ -2,7 +2,7 @@
 
 #[export]
 fn main () -> i32 {
-    let num_tests = 100;
+    let num_tests = 1;
 
     //let data_train = read_train();
     let data_test = read_test();

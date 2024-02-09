@@ -73,12 +73,12 @@ void read_test_labels (int ** labels) {
 }
 
 void read_train_images (char ** images) {
-    FILE * labels_file = fopen("mnist-data/train-images-idx3-ubyte", "r");
+    FILE * images_file = fopen("mnist-data/train-images-idx3-ubyte", "r");
 
     image_header header;
 
     for (int i = 0; i < 16; i++) {
-        char d = fgetc(labels_file);
+        char d = fgetc(images_file);
         int endian_fixed_address = i - (i % 4) + (3 - i % 4);
         header.data[endian_fixed_address] = d;
     }
@@ -89,20 +89,20 @@ void read_train_images (char ** images) {
 
     *images = (char*)malloc(sizeof(char) * header.length * header.rows * header.cols);
     for (int i = 0; i < header.length * header.rows * header.cols; i++) {
-        char d = fgetc(labels_file);
+        char d = fgetc(images_file);
         (*images)[i] = d;
     }
 
-    fclose(labels_file);
+    fclose(images_file);
 }
 
 void read_test_images (char ** images) {
-    FILE * labels_file = fopen("mnist-data/t10k-images-idx3-ubyte", "r");
+    FILE * images_file = fopen("mnist-data/t10k-images-idx3-ubyte", "r");
 
     image_header header;
 
     for (int i = 0; i < 16; i++) {
-        char d = fgetc(labels_file);
+        char d = fgetc(images_file);
         int endian_fixed_address = i - (i % 4) + (3 - i % 4);
         header.data[endian_fixed_address] = d;
     }
@@ -113,22 +113,38 @@ void read_test_images (char ** images) {
 
     *images = (char*)malloc(sizeof(char) * header.length * header.rows * header.cols);
     for (int i = 0; i < header.length * header.rows * header.cols; i++) {
-        char d = fgetc(labels_file);
+        char d = fgetc(images_file);
         (*images)[i] = d;
     }
 
-    fclose(labels_file);
-}
-
-void main_old () {
-    int * labels;
-    read_train_labels(&labels);
-
-    char * images;
-    read_train_images(&images);
+    fclose(images_file);
 }
 
 int rv_lane_id() { return 0; }
+
+void read_images(char * filename, char ** images) {
+    FILE * images_file = fopen(filename, "r");
+
+    image_header header;
+
+    for (int i = 0; i < 16; i++) {
+        char d = fgetc(images_file);
+        header.data[i] = d;
+    }
+
+    printf("%d %d %d %d\n", header.magic, header.length, header.rows, header.cols);
+
+    assert(header.magic == 2052);
+
+    *images = (char*)malloc(sizeof(char) * header.length * header.rows * header.cols * 3);
+
+    for (int i = 0; i < header.length * header.rows * header.cols * 3; i++) {
+        char d = fgetc(images_file);
+        (*images)[i] = d;
+    }
+
+    fclose(images_file);
+}
 
 #ifdef __cplusplus
 }

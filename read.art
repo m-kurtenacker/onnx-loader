@@ -3,11 +3,6 @@
 #[import(cc = "C", name = "read_test_labels")] fn read_test_labels(_labels: &mut &[i32]) -> ();
 #[import(cc = "C", name = "read_test_images")] fn read_test_images(_image_data: &mut &[u8]) -> ();
 
-#[import(cc = "C", name = "load_matrixA")] fn load_matrixA(_matrixA: &mut [f32]) -> ();
-#[import(cc = "C", name = "load_matrixB")] fn load_matrixB(_matrixB: &mut [f32]) -> ();
-#[import(cc = "C", name = "load_biasA")] fn load_biasA(_biasA: &mut [f32]) -> ();
-#[import(cc = "C", name = "load_biasB")] fn load_biasB(_biasB: &mut [f32]) -> ();
-
 
 struct image_item {
     image_buffer: Buffer,
@@ -66,8 +61,8 @@ fn read_train() -> &[image_item] {
         let image = bitcast[&mut[f32]](items(i).image_buffer.data);
         for x in range(0, 28) {
             for y in range(0, 28) {
-                //image(y * 28 + x) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
-                image(y * 28 + x) = ((images(i * 28 * 28 + y * 28 + x) as f32 / 255.0) - mean) / stddev;
+                image(y * 28 + x) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
+                //image(y * 28 + x) = ((images(i * 28 * 28 + y * 28 + x) as f32 / 255.0) - mean) / stddev;
             }
         }
     }
@@ -75,32 +70,27 @@ fn read_train() -> &[image_item] {
     items
 }
 
-fn read_test() -> &[image_item] {
-    let mut labels: &[i32];
-    let labelspp = &mut labels;
-    read_test_labels(labelspp);
+//void read_images(char * filename, char ** images);
+#[import(cc = "C", name = "read_images")] fn read_images(_filename: &[u8], _image_data: &mut &[u8]) -> ();
 
+fn read_test() -> &[image_item] {
     let mut images: &[u8];
     let imagespp = &mut images;
-    read_test_images(imagespp);
+    read_images("/home/matthiask/Documents/test/networks/onnx-model-zoo/validated/vision/body_analysis/age_gender/dependencies/data.ubyte", imagespp);
 
-    let t = runtime_alloc(0,sizeof[image_item]() * 10000);
+    let t = runtime_alloc(0, sizeof[image_item]() * 1);
     let items = bitcast[&mut[image_item]](t);
 
-    for i in range(0, 10000) {
-        items(i).label = labels(i);
-    }
+    for i in range(0, 1) {
+        items(i).label = 0;
 
-    for i in range(0, 10000) {
-        let mean = 0.1307 as f32;
-        let stddev = 0.3081 as f32;
-
-        items(i).image_buffer = alloc_cpu(sizeof[&[f32]]() * 28 * 28);
+        items(i).image_buffer = alloc_cpu(sizeof[&[f32]]() * 224 * 224 * 3);
         let image = bitcast[&mut[f32]](items(i).image_buffer.data);
-        for x in range(0, 28) {
-            for y in range(0, 28) {
-                //image(y * 28 + x) = images(i * 28 * 28 + y * 28 + x) as f32 / 255.0;
-                image(y * 28 + x) = ((images(i * 28 * 28 + y * 28 + x) as f32 / 255.0) - mean) / stddev;
+        for x in range(0, 224) {
+            for y in range(0, 224) {
+                for chan in range(0, 3) {
+                    image(chan + 3 * (y * 224 + x)) = images(i * 224 * 224 * 3 + (y * 224 + x) * 3 + chan) as f32 / 255.0;
+                }
             }
         }
     }

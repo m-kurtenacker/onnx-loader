@@ -1,7 +1,8 @@
 fn @matrix_concat4[T] (manager: PassManager, mat1: Tensor[T], mat2: Tensor[T], mat3: Tensor[T], mat4: Tensor[T]) -> Tensor[T] {
     let size_fn = @|n : i32| {
-        if n == mat1.num_dims - 1 {
-            mat1.size_fn(n) + mat2.size_fn(n) + mat3.size_fn(n) + mat4.size_fn(n)
+        let max_dim = mat1.num_dims - 1;
+        if n == max_dim {
+            mat1.size_fn(max_dim) + mat2.size_fn(max_dim) + mat3.size_fn(max_dim) + mat4.size_fn(max_dim)
         } else {
             mat1.size_fn(n)
         }
@@ -51,8 +52,9 @@ fn @matrix_concat4_f32 (manager: PassManager, mat1: Tensor[f32], mat2: Tensor[f3
 
 fn @matrix_concat2[T] (manager: PassManager, mat1: Tensor[T], mat2: Tensor[T]) -> Tensor[T] {
     let size_fn = @|n : i32| {
-        if n == mat1.num_dims - 1 {
-            mat1.size_fn(n) + mat2.size_fn(n)
+        let max_dim = mat1.num_dims - 1;
+        if n == max_dim {
+            mat1.size_fn(max_dim) + mat2.size_fn(max_dim)
         } else {
             mat1.size_fn(n)
         }
