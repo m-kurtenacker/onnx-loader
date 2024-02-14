@@ -3,7 +3,7 @@ import onnx
 #ONNX_MODEL = "../mnist-example/mnist.onnx"
 #ONNX_MODEL = "../mnist-example/mnist_linear.onnx"
 #ONNX_MODEL = "../mnist-example/mnist_cnn.onnx"
-ONNX_MODEL = "../onnx-models/onnx-model-zoo/validated/vision/body_analysis/age_gender/models/gender_googlenet.onnx"
+ONNX_MODEL = "../onnx-model-zoo/validated/vision/body_analysis/age_gender/models/gender_googlenet.onnx"
 
 model = onnx.load(ONNX_MODEL)
 graph = model.graph
@@ -16,6 +16,7 @@ except ImportError:
     print("Importing IPython failed.")
     print("Install with ./venv/bin/pip install ipython")
 
+#Setup all types that are required in the network execution stack
 mem_type = ThorinMemType()
 f32_type = ThorinPrimType("qf32")
 i32_type = ThorinPrimType("qs32")
@@ -39,45 +40,89 @@ size_fn_type = ThorinFnType([mem_type, i32_type], i64_type)
 access_fn_type = ThorinFnType([mem_type, i64_arr_type], f32_ptr_type)
 tensor_type = ThorinStructType("Tensor_f32", [("buffer", buffer_type), ("num_dims", i32_type), ("size_fn", size_fn_type), ("access_fn", access_fn_type)])
 
+i64_arr_1_type = ThorinDefiniteArrayType(i64_type, 1)
+access_fn_1_type = ThorinFnType([mem_type, i64_arr_1_type], f32_ptr_type)
+tensor_1_type = ThorinStructType("Tensor1_f32", [("buffer", buffer_type), ("size", i64_arr_1_type), ("access_fn", access_fn_1_type)])
+
+i64_arr_2_type = ThorinDefiniteArrayType(i64_type, 2)
+access_fn_2_type = ThorinFnType([mem_type, i64_arr_2_type], f32_ptr_type)
+tensor_2_type = ThorinStructType("Tensor2_f32", [("buffer", buffer_type), ("size", i64_arr_2_type), ("access_fn", access_fn_2_type)])
+
+i64_arr_3_type = ThorinDefiniteArrayType(i64_type, 3)
+access_fn_3_type = ThorinFnType([mem_type, i64_arr_3_type], f32_ptr_type)
+tensor_3_type = ThorinStructType("Tensor3_f32", [("buffer", buffer_type), ("size", i64_arr_3_type), ("access_fn", access_fn_3_type)])
+
+i64_arr_4_type = ThorinDefiniteArrayType(i64_type, 4)
+access_fn_4_type = ThorinFnType([mem_type, i64_arr_4_type], f32_ptr_type)
+tensor_4_type = ThorinStructType("Tensor4_f32", [("buffer", buffer_type), ("size", i64_arr_4_type), ("access_fn", access_fn_4_type)])
+
+#i64_arr_<n>_type = ThorinDefiniteArrayType(i64_type, <n>)
+#access_fn_<n>_type = ThorinFnType([mem_type, i64_arr_<n>_type], f32_ptr_type)
+#tensor_<n>_type = ThorinStructType("Tensor<n>_f32", [("buffer", buffer_type), ("size", i64_arr_<n>_type), ("access_fn", access_fn_<n>_type)])
+
 body_type = ThorinFnType([mem_type, passmanager_type], True)
 
-ret_type = ThorinFnType([mem_type, tensor_type])
+tensor_return_type = ThorinFnType([mem_type, tensor_type])
+
+tensor_1_return_type = ThorinFnType([mem_type, tensor_1_type])
+tensor_2_return_type = ThorinFnType([mem_type, tensor_2_type])
+tensor_3_return_type = ThorinFnType([mem_type, tensor_3_type])
+tensor_4_return_type = ThorinFnType([mem_type, tensor_4_type])
+
 return_type = ThorinFnType([mem_type])
 network_exec_type = ThorinFnType([mem_type, data_type], data_type)
 exec_type = ThorinFnType([mem_type], ThorinFnType([mem_type]))
-tensor_return_type = ThorinFnType([mem_type, tensor_type])
+
 access_return_type = ThorinFnType([mem_type, f32_ptr_type])
 
 
 def alloc_tensor(entry_mem, passmanager, finish_cont, dimensions):
     #print("Alloc tensor with", dimensions)
+
     thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), dimensions))
-    with ThorinContinuation(size_fn_type, filter=True) as (size_lambda, size_mem, dimension, size_return):
-        sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
-        size = ThorinExtract(sizes, dimension)
-        size_lambda(size_return, size_mem, size)
+    sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
 
     num_dimensions = len(dimensions)
-    return (alloc_tensor_thorin, entry_mem, passmanager, ThorinConstant(i32_type, num_dimensions), size_lambda, finish_cont)
+    return (alloc_tensor_thorin, entry_mem, passmanager, sizes, finish_cont)
 
 
 def alloc_initializer(entry_mem, passmanager, finish_cont, dimensions):
-    #print("Alloc tensor with", dimensions)
+    #print("Alloc initializer with", dimensions)
     thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), dimensions))
-    with ThorinContinuation(size_fn_type, filter=True) as (size_lambda, size_mem, dimension, size_return):
-        sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
-        size = ThorinExtract(sizes, dimension)
-        size_lambda(size_return, size_mem, size)
+    sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
 
     num_dimensions = len(dimensions)
-    return (alloc_initializer_thorin, entry_mem, passmanager, ThorinConstant(i32_type, num_dimensions), size_lambda, finish_cont)
+    if num_dimensions == 1:
+        return (alloc_initializer_thorin_1, entry_mem, passmanager, sizes, finish_cont)
+    elif num_dimensions == 2:
+        return (alloc_initializer_thorin_2, entry_mem, passmanager, sizes, finish_cont)
+    elif num_dimensions == 3:
+        return (alloc_initializer_thorin_3, entry_mem, passmanager, sizes, finish_cont)
+    elif num_dimensions == 4:
+        return (alloc_initializer_thorin_4, entry_mem, passmanager, sizes, finish_cont)
 
 
 def alloc_and_load_tensor(entry_mem, passmanager, finish_cont, dimensions, matrix_name):
     model_name = thorinString(ONNX_MODEL)
     matrix_name = thorinString(matrix_name)
 
-    with ThorinContinuation(tensor_return_type) as (alloc_continue, alloc_mem, tensor):
+    num_dimensions = len(dimensions)
+    return_fn_type = tensor_return_type
+    load_matrix = load_matrix_into
+    if num_dimensions == 1:
+        return_fn_type = tensor_1_return_type
+        load_matrix = load_tensor1_into
+    elif num_dimensions == 2:
+        return_fn_type = tensor_2_return_type
+        load_matrix = load_tensor2_into
+    elif num_dimensions == 3:
+        return_fn_type = tensor_3_return_type
+        load_matrix = load_tensor3_into
+    elif num_dimensions == 4:
+        return_fn_type = tensor_4_return_type
+        load_matrix = load_tensor4_into
+
+    with ThorinContinuation(return_fn_type) as (alloc_continue, alloc_mem, tensor):
         with ThorinContinuation(return_type) as (load_cont, finish_mem):
             load_cont(finish_cont, finish_mem, tensor)
         with ThorinContinuation(exec_type, filter=True) as (load_return, load_mem, load_int):
@@ -86,15 +131,29 @@ def alloc_and_load_tensor(entry_mem, passmanager, finish_cont, dimensions, matri
         alloc_continue(load_matrix, alloc_mem, tensor, model_name, matrix_name, load_return)
 
     return alloc_initializer(entry_mem, passmanager, alloc_continue, dimensions)
+    #return alloc_initializer(entry_mem, passmanager, finish_cont, dimensions)
 
 
 with Thorin("network") as network:
     network.include("network-tools.thorin.json")
 
     sequential = network.find_imported_def("sequential")
-    alloc_tensor_thorin = network.find_imported_def("alloc_tensor_f32")
-    alloc_initializer_thorin = network.find_imported_def("alloc_initializer_f32")
-    load_matrix = network.find_imported_def("load_matrix_into")
+
+    alloc_tensor_thorin = network.find_imported_def("alloc_tensor_3_f32")
+    #alloc_initializer_thorin = network.find_imported_def("alloc_initializer_f32")
+
+    alloc_initializer_thorin_1 = network.find_imported_def("alloc_initializer_1_f32")
+    alloc_initializer_thorin_2 = network.find_imported_def("alloc_initializer_2_f32")
+    alloc_initializer_thorin_3 = network.find_imported_def("alloc_initializer_3_f32")
+    alloc_initializer_thorin_4 = network.find_imported_def("alloc_initializer_4_f32")
+
+    load_matrix_into = network.find_imported_def("load_matrix_into")
+
+    load_tensor1_into = network.find_imported_def("load_tensor1_into")
+    load_tensor2_into = network.find_imported_def("load_tensor2_into")
+    load_tensor3_into = network.find_imported_def("load_tensor3_into")
+    load_tensor4_into = network.find_imported_def("load_tensor4_into")
+
     mat_flatten = network.find_imported_def("matrix_flatten_f32")
     mat_mul = network.find_imported_def("matrix_multiply_f32")
     mat_add = network.find_imported_def("matrix_add_f32")
@@ -112,27 +171,27 @@ with Thorin("network") as network:
     mat_concat = network.find_imported_def("matrix_concat4_f32")
 
     #Define types for imported continuations. Only needed for printing.
-    sequential.type = ThorinFnType([mem_type, body_type], ThorinFnType([mem_type], True))
-    alloc_tensor_thorin.type = ThorinFnType([mem_type, passmanager_type, i32_type, size_fn_type], tensor_type)
-    alloc_initializer_thorin.type = ThorinFnType([mem_type, passmanager_type, i32_type, size_fn_type], tensor_type)
-    load_matrix.type = ThorinFnType([mem_type, tensor_type, string_type, string_type], ThorinFnType([mem_type], True))
-    mat_flatten.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
-    mat_mul.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
-    mat_add.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
-    mat_relu.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
-    mat_gemm.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type], tensor_type)
-    mat_softmax.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
-    mat_log_softmax.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
-    mat_dropout.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
-    mat_max_pool.type = ThorinFnType([mem_type, passmanager_type, tensor_type, i64_arr_type, i64_arr_type, i64_arr_type], tensor_type)
-    mat_avg_pool.type = ThorinFnType([mem_type, passmanager_type, tensor_type, i64_arr_type, i64_arr_type, i64_arr_type], tensor_type)
-    mat_lrn.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
-    mat_conv.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type], tensor_type)
+    #sequential.type = ThorinFnType([mem_type, body_type], ThorinFnType([mem_type], True))
+    #alloc_tensor_thorin.type = ThorinFnType([mem_type, passmanager_type, i32_type, size_fn_type], tensor_type)
+    #alloc_initializer_thorin.type = ThorinFnType([mem_type, passmanager_type, i32_type, size_fn_type], tensor_type)
+    #load_matrix.type = ThorinFnType([mem_type, tensor_type, string_type, string_type], ThorinFnType([mem_type], True))
+    #mat_flatten.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_mul.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
+    #mat_add.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
+    #mat_relu.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_gemm.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type], tensor_type)
+    #mat_softmax.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_log_softmax.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_dropout.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_max_pool.type = ThorinFnType([mem_type, passmanager_type, tensor_type, i64_arr_type, i64_arr_type, i64_arr_type], tensor_type)
+    #mat_avg_pool.type = ThorinFnType([mem_type, passmanager_type, tensor_type, i64_arr_type, i64_arr_type, i64_arr_type], tensor_type)
+    #mat_lrn.type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    #mat_conv.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type], tensor_type)
 
-    mat_concat.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type, tensor_type], tensor_type)
+    #mat_concat.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type, tensor_type, tensor_type], tensor_type)
 
     #mat_reshape.type = ThorinFnType([mem_type, passmanager_type, tensor_type, ThorinTupleType([i32_type, i64_arr_type])], tensor_type)
-    mat_reshape.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
+    #mat_reshape.type = ThorinFnType([mem_type, passmanager_type, tensor_type, tensor_type], tensor_type)
 
     with ThorinContinuation(network_exec_type, internal="run_network", thorin=network) as (run_network, run_network_mem, image, ret_function):
         run_network_mem, frame = thorinEnterExtract(run_network_mem)
@@ -174,8 +233,20 @@ with Thorin("network") as network:
                     assert(False)
 
             def load_initializer(onnx_node):
-                with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
-                    dimensions = onnx_node.dims
+                dimensions = onnx_node.dims
+
+                num_dimensions = len(dimensions)
+                return_fn_type = tensor_return_type
+                if num_dimensions == 1:
+                    return_fn_type = tensor_1_return_type
+                elif num_dimensions == 2:
+                    return_fn_type = tensor_2_return_type
+                elif num_dimensions == 3:
+                    return_fn_type = tensor_3_return_type
+                elif num_dimensions == 4:
+                    return_fn_type = tensor_4_return_type
+
+                with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
                     dimensions.reverse()
 
                     call_function = lambda in_cont, in_mem: in_cont(*alloc_and_load_tensor(in_mem, passmanager, return_cont, dimensions, onnx_node.name))
@@ -187,6 +258,7 @@ with Thorin("network") as network:
 
             def build_node(onnx_node):
                 if onnx_node.op_type == "Constant":
+                    assert(False) # Unsupported
                     if onnx_node.attribute[0].t.data_type == 6: #i32
                         const_type = i32_type
                     elif onnx_node.attribute[0].t.data_type == 7: #i64
@@ -242,9 +314,7 @@ with Thorin("network") as network:
 
                     attributes = [shape_glob_opaque, stride_glob_opaque, padding_glob_opaque]
 
-                    #embed()
-
-                    with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
+                    with ThorinContinuation(tensor_3_return_type) as (return_cont, return_mem, result_tensor):
                         call_function = lambda in_cont, in_mem: in_cont(translate_operation(onnx_node), in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
@@ -252,7 +322,26 @@ with Thorin("network") as network:
                         nodes.update({onnx_node.output[0] : update_node})
                         return onnx_node.output[0]
                 else:
-                    with ThorinContinuation(tensor_return_type) as (return_cont, return_mem, result_tensor):
+                    return_fn_type = tensor_return_type
+
+                    if onnx_node.op_type == "Relu" or "relu" in onnx_node.op_type:
+                        return_fn_type = tensor_3_return_type
+                    elif onnx_node.op_type == "Conv" or "conv" in onnx_node.op_type:
+                        return_fn_type = tensor_3_return_type
+                    elif onnx_node.op_type == "Concat" or "SequenceConstruct" in onnx_node.op_type:
+                        return_fn_type = tensor_3_return_type
+                    elif onnx_node.op_type == "Dropout" or "dropout" in onnx_node.op_type:
+                        return_fn_type = tensor_3_return_type
+                    elif onnx_node.op_type == "Reshape" or "_view" in onnx_node.op_type:
+                        return_fn_type = tensor_1_return_type
+                    elif onnx_node.op_type == "Gemm" or "Linear" in onnx_node.op_type:
+                        return_fn_type = tensor_1_return_type
+                    elif onnx_node.op_type == "Softmax" or "softmax" in onnx_node.op_type:
+                        return_fn_type = tensor_1_return_type
+                    elif onnx_node.op_type == "LRN" or "LocalResponseNorm" in onnx_node.op_type:
+                        return_fn_type = tensor_3_return_type
+
+                    with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
                         call_function = lambda in_cont, in_mem: in_cont(translate_operation(onnx_node), in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], return_cont)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
@@ -323,28 +412,20 @@ with Thorin("network") as network:
                 ordered_nodes.append(input_name)
             else:
                 num_image_dims = len(image_dims)
-                with ThorinContinuation(size_fn_type, filter=True) as (size_lambda, size_mem, index, size_return):
-                    thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), image_dims))
-                    sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
+                thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), image_dims))
+                sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
 
-                    with ThorinContinuation(size_fn_type, filter=True) as (size_lambda, size_mem, dimension, size_return):
-                        size = ThorinExtract(sizes, dimension)
-                        size_lambda(size_return, size_mem, size)
+                with ThorinContinuation(access_fn_3_type, filter=True) as (access_lambda, access_mem, dimensions, access_return):
+                    x = ThorinExtract(dimensions, ThorinConstant(i64_type, 0))
+                    y = ThorinExtract(dimensions, ThorinConstant(i64_type, 1))
+                    chan = ThorinExtract(dimensions, ThorinConstant(i64_type, 2))
 
-                with ThorinContinuation(access_fn_type, filter=True) as (access_lambda, access_mem, dimensions_ptr, access_return):
-                    x_ptr = ThorinLEA([dimensions_ptr, ThorinConstant(i64_type, 0)])
-                    y_ptr = ThorinLEA([dimensions_ptr, ThorinConstant(i64_type, 1)])
-                    #chan_ptr = ThorinLEA([dimensions_ptr, ThorinConstant(i64_type, 2)])
-                    access_mem, x = access_mem >> x_ptr
-                    access_mem, y = access_mem >> y_ptr
-                    #access_mem, chan = access_mem >> chan_ptr
+                    image_chan_x_y_ptr = ThorinLEA([image, chan + ThorinConstant(i64_type, image_dims[2]) * (x + ThorinConstant(i64_type, image_dims[1]) * y)])
+                    #image_x_y_ptr = ThorinLEA([image, y * ThorinConstant(i64_type, image_dims[0]) + x])
 
-                    #image_chan_x_y_ptr = ThorinLEA([image, chan * ThorinConstant(i64_type, image_dims[0]*image_dims[1]) + y * ThorinConstant(i64_type, image_dims[0]) + x])
-                    image_x_y_ptr = ThorinLEA([image, y * ThorinConstant(i64_type, image_dims[0]) + x])
-
-                    access_lambda(access_return, access_mem, image_x_y_ptr)
+                    access_lambda(access_return, access_mem, image_chan_x_y_ptr)
                 image_buffer = ThorinStruct(buffer_type, [ThorinBitcast(image, iarrptr_type), ThorinConstant(i64_type, 0), ThorinConstant(i32_type, 0)])
-                tensorImage = ThorinStruct(tensor_type, [image_buffer, ThorinConstant(i32_type, num_image_dims), size_lambda, access_lambda])
+                tensorImage = ThorinStruct(tensor_3_type, [image_buffer, sizes, access_lambda])
                 nodes[input_name] = {"result": tensorImage}
 
             #num_initializers = 0
@@ -459,7 +540,7 @@ with Thorin("network") as network:
             nodes[ordered_nodes[0]]["call"](body_fn, body_mem)
 
             #Execute exit
-            with ThorinContinuation(ret_type) as (result_store_cont, return_mem, result_tensor):
+            with ThorinContinuation(tensor_1_return_type) as (result_store_cont, return_mem, result_tensor):
                 result_buffer = ThorinExtract(result_tensor, 0)
                 result_data = ThorinBitcast(ThorinExtract(result_buffer, 0), data_type)
                 return_mem = return_mem << (result_ptr, result_data)

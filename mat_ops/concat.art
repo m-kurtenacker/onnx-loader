@@ -1,37 +1,44 @@
-fn @matrix_concat4[T] (manager: PassManager, mat1: Tensor[T], mat2: Tensor[T], mat3: Tensor[T], mat4: Tensor[T]) -> Tensor[T] {
-    let size_fn = @|n : i32| {
+fn @matrix_concat4[T] (manager: PassManager, mat1: Tensor3[T], mat2: Tensor3[T], mat3: Tensor3[T], mat4: Tensor3[T]) -> Tensor3[T] {
+    /*let size_fn = @|n : i32| {
         let max_dim = mat1.num_dims - 1;
         if n == max_dim {
             mat1.size_fn(max_dim) + mat2.size_fn(max_dim) + mat3.size_fn(max_dim) + mat4.size_fn(max_dim)
         } else {
             mat1.size_fn(n)
         }
+            [mat1.size_fn(0),
+            mat1.size_fn(1),
+            mat1.size_fn(2) + mat2.size_fn(2) + mat3.size_fn(2) + mat4.size_fn(2)](n)
     };
-    let num_dims = mat1.num_dims;
+    let num_dims = mat1.num_dims;*/
+    let sizes = [mat1.size(0),
+        mat1.size(1),
+        mat1.size(2) + mat2.size(2) + mat3.size(2) + mat4.size(2)];
 
     //TODO: This is a direct mapping to memory, but the input tensor shape might actually be different already!
     let new_access_fn = |n : &[i64]| {
-        let address_buffer = manager.alloc_dynamic(0: i64, num_dims as i64);
-        let address = bitcast[&mut [i64]](address_buffer.data);
+        //let address_buffer = manager.alloc_dynamic(0: i64, num_dims as i64);
+        //let address = bitcast[&mut [i64]](address_buffer.data);
+        let mut address : [i64 * 3];
 
-        for i in unroll(0, num_dims) {
+        for i in unroll(0, 4) {
             address(i) = n(i);
         }
 
-        if address(num_dims - 1) < mat1.size_fn(num_dims - 1) {
+        if address(3) < mat1.size(3) {
             mat1.access_fn(address)
         } else {
-            address(num_dims - 1) -= mat1.size_fn(num_dims - 1);
+            address(3) -= mat1.size(3);
 
-            if address(num_dims - 1) < mat2.size_fn(num_dims - 1) {
+            if address(3) < mat2.size(3) {
                 mat2.access_fn(address)
             } else {
-                address(num_dims - 1) -= mat2.size_fn(num_dims - 1);
+                address(3) -= mat2.size(3);
 
-                if address(num_dims - 1) < mat3.size_fn(num_dims - 1) {
+                if address(3) < mat3.size(3) {
                     mat3.access_fn(address)
                 } else {
-                    address(num_dims - 1) -= mat3.size_fn(num_dims - 1);
+                    address(3) -= mat3.size(3);
 
                     mat4.access_fn(address)
                 }
@@ -40,24 +47,26 @@ fn @matrix_concat4[T] (manager: PassManager, mat1: Tensor[T], mat2: Tensor[T], m
 
     };
 
-    Tensor[T] {
+    Tensor3[T] {
         buffer = mat1.buffer, //TODO: Remove buffer from tensors, manage this elsewere.
-        num_dims = num_dims,
-        size_fn = size_fn,
+        size = sizes,
         access_fn = new_access_fn
     }
 }
 #[intern]
-fn @matrix_concat4_f32 (manager: PassManager, mat1: Tensor[f32], mat2: Tensor[f32], mat3: Tensor[f32], mat4: Tensor[f32]) = @matrix_concat4[f32] (manager, mat1, mat2, mat3, mat4);
+fn @matrix_concat4_f32 (manager: PassManager, mat1: Tensor3[f32], mat2: Tensor3[f32], mat3: Tensor3[f32], mat4: Tensor3[f32]) = @matrix_concat4[f32] (manager, mat1, mat2, mat3, mat4);
 
 fn @matrix_concat2[T] (manager: PassManager, mat1: Tensor[T], mat2: Tensor[T]) -> Tensor[T] {
     let size_fn = @|n : i32| {
-        let max_dim = mat1.num_dims - 1;
+        /*let max_dim = mat1.num_dims - 1;
         if n == max_dim {
             mat1.size_fn(max_dim) + mat2.size_fn(max_dim)
         } else {
             mat1.size_fn(n)
-        }
+        }*/
+            [mat1.size_fn(0),
+            mat1.size_fn(1),
+            mat1.size_fn(2) + mat2.size_fn(2)](n)
     };
     let num_dims = mat1.num_dims;
 

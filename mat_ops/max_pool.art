@@ -1,6 +1,6 @@
 #[export] static mut time_max_pool : i64;
 
-fn @matrix_max_pool (manager: PassManager, input: Tensor[f32], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor[f32] {
+fn @matrix_max_pool (manager: PassManager, input: Tensor3[f32], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor3[f32] {
 
     let start = get_micro_time();
 
@@ -8,27 +8,36 @@ fn @matrix_max_pool (manager: PassManager, input: Tensor[f32], shape: &[i64], st
        ~output shape: [ X/xk x Y/yk x chan ]
     */
 
-    let num_kernel_dims = input.num_dims - 1;
+    let num_kernel_dims = 3 - 1;
 
-    let new_size_fn = @|n : i32| -> i64 {
-        if n == num_kernel_dims {
+    /*let new_size_fn = @|n : i32| -> i64 {
+        /*if n == num_kernel_dims {
             input.size_fn(num_kernel_dims)
         } else {
             (input.size_fn(n) + 2 * padding(n) - shape(n)) / stride(n) + 1
         }
-    };
+            [(input.size_fn(0) + 2 * padding(0) - shape(0)) / stride(0) + 1,
+            (input.size_fn(1) + 2 * padding(1) - shape(1)) / stride(1) + 1,
+            input.size_fn(num_kernel_dims)](n)
+    };*/
+    let size = [(input.size(0) + 2 * padding(0) - shape(0)) / stride(0) + 1,
+            (input.size(1) + 2 * padding(1) - shape(1)) / stride(1) + 1,
+            input.size(num_kernel_dims)];
 
-    let output = @alloc_tensor[f32](manager, input.num_dims, new_size_fn);
+    let output = @alloc_tensor_layout_3[f32](manager, size, AllocLayout::KCR);
 
-    let output_dims_buffer = manager.alloc(sizeof[i64]() * output.num_dims as i64);
-    let output_dims = bitcast[&mut [i64]](output_dims_buffer.data);
-    for index in unroll(0, input.num_dims) {
-        output_dims(index) = output.size_fn(index);
+    //let output_dims_buffer = manager.alloc(sizeof[i64]() * output.num_dims as i64);
+    //let output_dims = bitcast[&mut [i64]](output_dims_buffer.data);
+    let mut output_dims : [i64 * 3];
+    for index in unroll(0, 3) {
+        output_dims(index) = output.size(index);
     }
 
-    for inst_out in multi_loop(manager, output.num_dims, output_dims) {
-        let input_dims_buffer = manager.alloc(sizeof[i64]() * num_kernel_dims as i64);
-        let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
+    for inst_out in multi_loop(manager, 3, output_dims) {
+        //let input_dims_buffer = manager.alloc(sizeof[i64]() * num_kernel_dims as i64);
+        //let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
+
+        let mut input_dims : [i64 * 3];
 
         input_dims(num_kernel_dims) = inst_out.index(num_kernel_dims);
 
@@ -40,8 +49,8 @@ fn @matrix_max_pool (manager: PassManager, input: Tensor[f32], shape: &[i64], st
                 if input_dims(i) < 0 {
                     input_dims(i) = 0;
                 }
-                if input_dims(i) >= input.size_fn(i) {
-                    input_dims(i) = input.size_fn(i) - 1;
+                if input_dims(i) >= input.size(i) {
+                    input_dims(i) = input.size(i) - 1;
                 }
             }
 
@@ -49,15 +58,15 @@ fn @matrix_max_pool (manager: PassManager, input: Tensor[f32], shape: &[i64], st
             max = math_builtins::fmax(max, data);
         }
 
-        *output.access_fn(inst_out.index) = max;
+        *output.access_fn([inst_out.index(0), inst_out.index(1), inst_out.index(2)]) = max;
     }
 
     time_max_pool += get_micro_time() - start;
 
-    print_tensor("MaxPool", output);
+    //print_tensor("MaxPool", output);
 
     output
 }
 
 #[intern]
-fn @matrix_max_pool_f32 (manager: PassManager, input: Tensor[f32], shape: &[i64], stride: &[i64], padding: &[i64]) = @matrix_max_pool(manager, input, shape, stride, padding);
+fn @matrix_max_pool_f32 (manager: PassManager, input: Tensor3[f32], shape: &[i64], stride: &[i64], padding: &[i64]) = @matrix_max_pool(manager, input, shape, stride, padding);

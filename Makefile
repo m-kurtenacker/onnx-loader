@@ -71,6 +71,24 @@ network-tools.thorin.json: sequential.art mat.art mat_ops/*.art
 network.thorin.json: network.py network-tools.thorin.json venv
 	./venv/bin/python network.py
 
+
+network-sup.thorin.json: sequential.art mat.art mat_ops/*.art network.art
+	artic \
+		${RUNTIME} \
+		$^ \
+		--emit-json \
+		--log-level ${LOG_LEVEL} \
+		-o network-sup
+
+network-4a.thorin.json: network-sup.thorin.json
+	anyopt \
+		$^ \
+		--pass cleanup \
+		--emit-json \
+		--log-level ${LOG_LEVEL} \
+		-o network-4a
+
+
 network-combined.thorin.json: network-tools.thorin.json network.thorin.json
 	anyopt \
 		$^ \

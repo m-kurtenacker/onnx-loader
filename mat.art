@@ -1,5 +1,5 @@
 fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
-    if (false) {
+    if (true) {
         print_string("Tensor ");
         print_string(name);
         print_string(" [");
@@ -40,6 +40,76 @@ fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
             }
         } else {
             print_string("Printing error: too many dimensions\n");
+        }
+    }
+}
+
+fn print_tensor_1 (name: &[u8], mat: Tensor1[f32]) -> () {
+    if (true) {
+        print_string("Tensor ");
+        print_string(name);
+        print_string(" [");
+        for i in range(0, 1 - 1) {
+            print_i64(mat.size(i));
+            print_string(" x ");
+        }
+        print_i64(mat.size(1 - 1));
+        print_string("]:\n");
+
+        for x in range(0, mat.size(0) as i32) {
+            print_f32(*mat.access_fn([x as i64]));
+            print_string(" ");
+        }
+        print_string("\n");
+    }
+}
+
+fn print_tensor_2 (name: &[u8], mat: Tensor2[f32]) -> () {
+    if (true) {
+        print_string("Tensor ");
+        print_string(name);
+        print_string(" [");
+        for i in range(0, 2 - 1) {
+            print_i64(mat.size(i));
+            print_string(" x ");
+        }
+        print_i64(mat.size(2 - 1));
+        print_string("]:\n");
+
+        for y in range(0, mat.size(1) as i32) {
+            for x in range(0, mat.size(0) as i32) {
+                print_f32(*mat.access_fn([x as i64, y as i64]));
+                print_string(" ");
+            }
+            print_string("\n");
+        }
+    }
+}
+
+fn print_tensor_3 (name: &[u8], mat: Tensor3[f32]) -> () {
+    if (true) {
+        print_string("Tensor ");
+        print_string(name);
+        print_string(" [");
+        for i in range(0, 3 - 1) {
+            print_i64(mat.size(i));
+            print_string(" x ");
+        }
+        print_i64(mat.size(3 - 1));
+        print_string("]:\n");
+
+        for chan in range(0, mat.size(2) as i32) {
+            print_string("chan_");
+            print_i32(chan);
+            print_string(":\n");
+
+            for y in range(0, mat.size(1) as i32) {
+                for x in range(0, mat.size(0) as i32) {
+                    print_f32(*mat.access_fn([x as i64, y as i64, chan as i64]));
+                    print_string(" ");
+                }
+                print_string("\n");
+            }
         }
     }
 }

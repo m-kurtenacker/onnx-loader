@@ -1,15 +1,11 @@
 #[export] static mut time_mul : i64;
 
-fn @mat_mul_simple (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) -> Tensor[f32] {
-    let num_result_dims = 1;
-    let new_size_fn = @|i : i32| -> i64 {
-        mat.size_fn(i + 1)
-    };
-    let output = @alloc_tensor[f32](manager, num_result_dims, new_size_fn);
+fn @mat_mul_simple (manager: PassManager, mat: Tensor2[f32], input: Tensor1[f32]) -> Tensor1[f32] {
+    let output = @alloc_tensor_layout_1[f32](manager, [mat.size(1)], AllocLayout::KCR);
 
-    for i in vector_range(0, output.size_fn(0) as i32) {
+    for i in vector_range(0, output.size(0) as i32) {
         let mut sum = 0 as f32;
-        for k in range(0, input.size_fn(0) as i32) {
+        for k in range(0, input.size(0) as i32) {
             sum += (*input.access_fn([k as i64])) * (*mat.access_fn([k as i64, i as i64]))
         }
         *output.access_fn([i as i64]) = sum;
@@ -18,16 +14,16 @@ fn @mat_mul_simple (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) 
     output
 }
 
-fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) -> Tensor[f32] {
+fn @matrix_multiply (manager: PassManager, mat: Tensor2[f32], input: Tensor1[f32]) -> Tensor1[f32] {
     let start = get_micro_time();
 
-    if (input.num_dims == 1 && mat.num_dims == 2) {
+    //if (input.num_dims == 1 && mat.num_dims == 2) {
         let output = mat_mul_simple(manager, mat, input);
 
         time_mul += get_micro_time() - start;
 
         output
-    } else {
+    /*} else {
         let num_result_dims = mat.num_dims - input.num_dims;
         let new_size_fn = @|i : i32| -> i64 {
             if i < num_result_dims { mat.size_fn(input.num_dims + i) } else { 0 as i64 }
@@ -72,8 +68,8 @@ fn @matrix_multiply (manager: PassManager, mat: Tensor[f32], input: Tensor[f32])
         time_mul += get_micro_time() - start;
 
         output
-    }
+    }*/
 }
 
 #[intern]
-fn @matrix_multiply_f32 (manager: PassManager, mat: Tensor[f32], input: Tensor[f32]) = @matrix_multiply(manager, mat, input);
+fn @matrix_multiply_f32 (manager: PassManager, mat: Tensor2[f32], input: Tensor1[f32]) = @matrix_multiply(manager, mat, input);
