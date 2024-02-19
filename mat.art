@@ -1,5 +1,7 @@
+static print_enable = false;
+
 fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
-    if (true) {
+    if (print_enable) {
         print_string("Tensor ");
         print_string(name);
         print_string(" [");
@@ -45,7 +47,7 @@ fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
 }
 
 fn print_tensor_1 (name: &[u8], mat: Tensor1[f32]) -> () {
-    if (true) {
+    if (print_enable) {
         print_string("Tensor ");
         print_string(name);
         print_string(" [");
@@ -65,7 +67,7 @@ fn print_tensor_1 (name: &[u8], mat: Tensor1[f32]) -> () {
 }
 
 fn print_tensor_2 (name: &[u8], mat: Tensor2[f32]) -> () {
-    if (true) {
+    if (print_enable) {
         print_string("Tensor ");
         print_string(name);
         print_string(" [");
@@ -87,7 +89,7 @@ fn print_tensor_2 (name: &[u8], mat: Tensor2[f32]) -> () {
 }
 
 fn print_tensor_3 (name: &[u8], mat: Tensor3[f32]) -> () {
-    if (true) {
+    if (print_enable) {
         print_string("Tensor ");
         print_string(name);
         print_string(" [");

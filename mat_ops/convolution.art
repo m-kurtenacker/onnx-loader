@@ -1,7 +1,8 @@
 #[export] static mut time_conv : i64;
 
-fn @matrix_convolution_padded (manager: PassManager, input: Tensor3[f32], weight: Tensor4[f32], bias: Tensor1[f32], stride: &[i64], padding: &[i64]) -> Tensor3[f32] {
-    if input.size(1) == 224 {
+#[intern]
+fn @matrix_convolution_padded (manager: PassManager, input: Tensor3[f32], weight: Tensor4[f32], bias: Tensor1[f32], output_size: &[i64], kernel_shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor3[f32] {
+    if input.size(1) == 28 {
         print_tensor_3("Input", input);
     }
 
@@ -13,22 +14,8 @@ fn @matrix_convolution_padded (manager: PassManager, input: Tensor3[f32], weight
        output shape: [ Xo x Yo x out_chan ]
     */
 
-    /*let new_size_fn = @|n : i32| -> i64 {
-        if n == 2 {
-            bias.size_fn(0)
-        } else {
-            (input.size_fn(n) + 2 * padding(n) - weight.size_fn(n)) / stride(n) + 1
-        }
-            [(input.size_fn(0) + 2 * padding(0) - weight.size_fn(0)) / stride(0) + 1,
-            (input.size_fn(1) + 2 * padding(1) - weight.size_fn(1)) / stride(1) + 1,
-            bias.size_fn(0)](n)
-    };*/
-
-    let new_size = [(input.size(0) + 2 * padding(0) - weight.size(0)) / stride(0) + 1,
-        (input.size(1) + 2 * padding(1) - weight.size(1)) / stride(1) + 1,
-        bias.size(0)];
-
-    let output = @alloc_tensor_layout_3[f32](manager, new_size, AllocLayout::KCR);
+    let output_size_fixed = [output_size(0), output_size(1), output_size(2)];
+    let output = @alloc_tensor_layout_3[f32](manager, output_size_fixed, AllocLayout::RCK);
 
     let num_in_chan = input.size(2) as i32;
     let num_out_chan = bias.size(0) as i32;
@@ -62,124 +49,7 @@ fn @matrix_convolution_padded (manager: PassManager, input: Tensor3[f32], weight
 
     time_conv += get_micro_time() - start;
 
-    //print_tensor("Convolution", output);
+    //print_tensor_3("Convolution", output);
 
     output
 }
-
-#[intern]
-fn @matrix_convolution_padded_f32 (manager: PassManager, input: Tensor3[f32], weight: Tensor4[f32], bias: Tensor1[f32], stride: &[i64], padding: &[i64]) = @matrix_convolution_padded(manager, input, weight, bias, stride, padding);
-
-fn @matrix_convolution (manager: PassManager, input: Tensor3[f32], weight: Tensor4[f32], bias: Tensor1[f32]) -> Tensor3[f32] {
-    f input.size(1) == 224 {
-        print_tensor_3("Input", input);
-    }
-
-    let start = get_micro_time();
-
-    /* input shape:  [ X x Y x in_chan ]
-       weight shape: [ Xk x Yk x in_chan x out_chan ]
-       bias shape:   [ out_chan ]
-       output shape: [ Xo x Yo x out_chan ]
-    */
-
-    /*let new_size_fn = @|n : i32| -> i64 {
-        if n == 2 {
-            bias.size_fn(0)
-        } else {
-            input.size_fn(n) - weight.size_fn(n) + 1 as i64
-        }
-            [input.size_fn(0) - weight.size_fn(0) + 1 as i64,
-            input.size_fn(1) - weight.size_fn(1) + 1 as i64,
-            bias.size_fn(0)](n)
-    };*/
-    let new_size = [input.size(0) - weight.size(0) + 1 as i64,
-        input.size(1) - weight.size(1) + 1 as i64,
-        bias.size(0)];
-
-    let output = @alloc_tensor_layout_3[f32](manager, new_size, AllocLayout::KCR);
-
-    let num_in_chan = input.size(2) as i32;
-    let num_out_chan = bias.size(0) as i32;
-
-    let kern_radius = (weight.size(0) / 2) as i32;
-
-    for x in range(kern_radius, input.size(0) as i32 - kern_radius) {
-        for y in range(kern_radius, input.size(1) as i32 - kern_radius) {
-            for out_chan in range(0, num_out_chan) {
-                let mut sum = 0 as f32;
-
-                for in_chan in range(0, num_in_chan) {
-                    for xk in range(- kern_radius, kern_radius + 1) {
-                        for yk in range(- kern_radius, kern_radius + 1) {
-                            let data = *input.access_fn([(x + xk) as i64, (y + yk) as i64, in_chan as i64]);
-                            let weight = *weight.access_fn([(xk + kern_radius) as i64, (yk + kern_radius) as i64, in_chan as i64, out_chan as i64]);
-
-                            sum += data * weight;
-                        }
-                    }
-                }
-
-                sum += *bias.access_fn([out_chan as i64]);
-
-                *output.access_fn([(x - kern_radius) as i64, (y - kern_radius) as i64, out_chan as i64]) = sum;
-            }
-        }
-    }
-
-    /*let output_dims_buffer = manager.alloc_dynamic(0: i64, output.num_dims as i64);
-    let output_dims = bitcast[&mut [i64]](output_dims_buffer.data);
-    for index in unroll(0, output.num_dims) {
-        output_dims(index) = output.size_fn(index);
-    }
-
-    for inst_out in multi_loop (manager, output.num_dims, output_dims) {
-        let out_chan = inst_out.index(0);
-
-        let mut sum = 0 as f32;
-
-        let weight_dims_buffer = manager.alloc_dynamic(0: i64, (weight.num_dims - 1) as i64);
-        let weight_dims = bitcast[&mut [i64]](weight_dims_buffer.data);
-        for index in unroll(0, weight.num_dims - 1) Mult simple{
-            weight_dims(index) = weight.size_fn(index);
-        }
-
-        for inst_kernel in multi_loop (manager, weight.num_dims - 1, weight_dims) {
-            let in_chan = inst_kernel.index(weight.num_dims - 2);
-
-            let weight_index_buffer = manager.alloc_dynamic(0: i64, weight.num_dims as i64);
-            let weight_index = bitcast[&mut [i64]](weight_index_buffer.data);
-            for j in unroll(0, weight.num_dims) {
-                if j == weight.num_dims - 1 {
-                    weight_index(j) = out_chan;
-                } else {
-                    weight_index(j) = inst_kernel.index(j);
-                }
-            }
-
-            let input_index_buffer = manager.alloc_dynamic(0: i64, input.num_dims as i64);
-            let input_index = bitcast[&mut [i64]](input_index_buffer.data);
-
-            for j in unroll(0, input.num_dims) {
-                if j == 0 {Mult simple
-                    input_index(j) = in_chan
-                } else {
-                    input_index(j) = inst_out.index(j) + inst_kernel.index(j + 1);
-                }
-            }
-
-            sum += (*input.access_fn(input_index)) * (*weight.access_fn(weight_index)) + (*bias.access_fn([out_chan]));
-        }
-
-        *output.access_fn(inst_out.index) = sum;
-    }*/
-
-    time_conv += get_micro_time() - start;
-
-    //print_tensor("Convolution", output);
-
-    output
-}
-
-#[intern]
-fn @matrix_convolution_f32 (manager: PassManager, input: Tensor3[f32], weight: Tensor4[f32], bias: Tensor1[f32]) = @matrix_convolution(manager, input, weight, bias);

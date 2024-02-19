@@ -1,75 +1,53 @@
-fn @matrix_softmax (manager: PassManager, mat: Tensor1[f32]) -> Tensor1[f32] {
-    let output = @alloc_tensor_layout_1[f32](manager, mat.size, AllocLayout::KCR);
-
-    let mut sum = 0 as f32;
-    let sump = &mut sum;
-
-    //let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-    //let dims = bitcast[&mut [i64]](dims_buffer.data);
-    let mut dims : [i64 * 1];
-    for index in range(0, 1) {
-        dims(index) = mat.size(index);
-    }
-
-    for instance in multi_loop (manager, 1, dims) {
-        let index = [instance.index(0)];
-        let data = math_builtins::exp(*mat.access_fn(index));
-        *output.access_fn(index) = data;
-        atomic[f32](11, sump, data, 7, "");
-    }
-
-    for instance in multi_loop (manager, 1, dims) {
-        let index = [instance.index(0)];
-        let data = *output.access_fn(index);
-        *output.access_fn(index) = data / sum;
-    }
-
-    //manager.release(dims_buffer);
-
-    output
-}
-
 #[intern]
-fn @matrix_softmax_f32 (manager: PassManager, mat: Tensor1[f32]) = @matrix_softmax(manager, mat);
-
-fn @matrix_log_softmax (manager: PassManager, mat: Tensor[f32]) {
-    let output = @alloc_tensor[f32](manager, mat.num_dims, mat.size_fn);
+fn @matrix_softmax (manager: PassManager, mat: Tensor1[f32], output_size: &[i64]) -> Tensor1[f32] {
+    let output_size_fixed = [output_size(0)];
+    let output = @alloc_tensor_layout_1[f32](manager, output_size_fixed, AllocLayout::RCK);
 
     let mut sum = 0 as f32;
     //let sump = &mut sum;
 
-    /*let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-    let dims = bitcast[&mut [i64]](dims_buffer.data);
-    for index in range(0, mat.num_dims) {
-        dims(index) = mat.size_fn(index);
-    }
+    for instance in multi_loop (manager, 1, output_size) {
+        let index = [instance.index(0)];
 
-    for instance in multi_loop (manager, mat.num_dims, dims) {
-        let data = math_builtins::exp(*mat.access_fn(instance.index));
-        *output.access_fn(instance.index) = data;
+        let data = math_builtins::exp(*mat.access_fn(index));
+        *output.access_fn(index) = data;
+        sum += data;
         //atomic[f32](11, sump, data, 7, "");
-        sum += data;
     }
 
-    for instance in multi_loop (manager, mat.num_dims, dims) {
-        let data = *output.access_fn(instance.index);
-        *output.access_fn(instance.index) = math_builtins::log(data / sum);
-    }*/
-    for i in range (0, 10) {
-        let data = math_builtins::exp(*mat.access_fn([i as i64]));
-        *output.access_fn([i as i64]) = data;
-        sum += data;
-    }
+    for instance in multi_loop (manager, 1, output_size) {
+        let index = [instance.index(0)];
 
-    for i in range (0, 10) {
-        let data = *output.access_fn([i as i64]);
-        *output.access_fn([i as i64]) = math_builtins::log(data / sum);
+        let data = *output.access_fn(index);
+        *output.access_fn(index) = data / sum;
     }
-
-    //manager.release(dims_buffer);
 
     output
 }
 
 #[intern]
-fn @matrix_log_softmax_f32 (manager: PassManager, mat: Tensor[f32]) = @matrix_log_softmax(manager, mat);
+fn @matrix_log_softmax (manager: PassManager, mat: Tensor1[f32], output_size: &[i64]) -> Tensor1[f32] {
+    let output_size_fixed = [output_size(0)];
+    let output = @alloc_tensor_layout_1[f32](manager, output_size_fixed, AllocLayout::RCK);
+
+    let mut sum = 0 as f32;
+    //let sump = &mut sum;
+
+    for instance in multi_loop (manager, 1, output_size) {
+        let index = [instance.index(0)];
+
+        let data = math_builtins::exp(*mat.access_fn(index));
+        *output.access_fn(index) = data;
+        sum += data;
+        //atomic[f32](11, sump, data, 7, "");
+    }
+
+    for instance in multi_loop (manager, 1, output_size) {
+        let index = [instance.index(0)];
+
+        let data = *output.access_fn(index);
+        *output.access_fn(index) = math_builtins::log(data / sum);
+    }
+
+    output
+}

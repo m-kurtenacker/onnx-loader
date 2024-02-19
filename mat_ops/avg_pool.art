@@ -1,54 +1,27 @@
-fn @matrix_avg_pool (manager: PassManager, input: Tensor3[f32], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor3[f32] {
-
-    //let start = get_micro_time();
-
+#[intern]
+fn @matrix_avg_pool (manager: PassManager, input: Tensor3[f32], output_size: &[i64], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor3[f32] {
     /* input shape:  [ X x Y x chan ]
        ~output shape: [ X/xk x Y/yk x chan ]
     */
 
-    //let num_kernel_dims = input.num_dims - 1;
-    let num_kernel_dims = 2;
-
-    /*let new_size_fn = @|n : i32| -> i64 {
-        /*if n == num_kernel_dims {
-            input.size_fn(num_kernel_dims)
-        } else {
-            (input.size_fn(n) + 2 * padding(n) - shape(n)) / stride(n) + 1
-        }
-            [(input.size_fn(0) + 2 * padding(0) - shape(0)) / stride(0) + 1,
-            (input.size_fn(1) + 2 * padding(1) - shape(1)) / stride(1) + 1,
-            input.size_fn(num_kernel_dims)](n)
-    };*/
-    let sizes = [(input.size(0) + 2 * padding(0) - shape(0)) / stride(0) + 1,
-            (input.size(1) + 2 * padding(1) - shape(1)) / stride(1) + 1,
-            input.size(num_kernel_dims)];
-
-    let output = @alloc_tensor_layout_3[f32](manager, sizes, AllocLayout::KCR);
-
-    //let output_dims_buffer = manager.alloc(sizeof[i64]() * 3 as i64);
-    //let output_dims = bitcast[&mut [i64]](output_dims_buffer.data);
-    let mut output_dims : [i64 * 3];
-    for index in unroll(0, 3) {
-        output_dims(index) = output.size(index);
-    }
+    let output_size_fixed = [output_size(0), output_size(1), output_size(2)];
+    let output = @alloc_tensor_layout_3[f32](manager, output_size_fixed, AllocLayout::RCK);
 
     let mut kernel_size = 1 : i64;
-    for index in unroll(0, num_kernel_dims) {
+    for index in unroll(0, 2) {
         kernel_size *= shape(index);
     }
 
-    for inst_out in multi_loop(manager, 3, output_dims) {
-        //let input_dims_buffer = manager.alloc(sizeof[i64]() * num_kernel_dims as i64);
-        //let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
+    for inst_out in multi_loop(manager, 3, output_size) {
         let mut input_dims : [i64 * 3];
 
-        input_dims(num_kernel_dims) = inst_out.index(num_kernel_dims);
+        let chanel = inst_out.index(2);
+        input_dims(2) = chanel;
 
-        //let mut max = - (1.0 : f32) / (0.0 : f32); // == -inf in normal floating point math.
         let mut sum = 0 : f32;
 
-        for kernel_instance in multi_loop(manager, num_kernel_dims, shape) {
-            for i in unroll(0, num_kernel_dims) {
+        for kernel_instance in multi_loop(manager, 2, shape) {
+            for i in unroll(0, 2) {
                 input_dims(i) = inst_out.index(i) * stride(i) - padding(i) + kernel_instance.index(i);
                 if input_dims(i) < 0 {
                     input_dims(i) = 0;
@@ -60,21 +33,12 @@ fn @matrix_avg_pool (manager: PassManager, input: Tensor3[f32], shape: &[i64], s
 
             let data = *input.access_fn(input_dims);
 
-            //max = math_builtins::fmax(max, data);
             sum += data;
         }
 
-        let out_address = [inst_out.index(0), inst_out.index(1), inst_out.index(2)];
-
-        *output.access_fn(out_address) = sum / (kernel_size as f32);
+        let index_fixed = [inst_out.index(0), inst_out.index(1), inst_out.index(2)];
+        *output.access_fn(index_fixed) = sum / (kernel_size as f32);
     }
-
-    //time_max_pool += get_micro_time() - start;
-
-    //print_tensor("MaxPool", output);
 
     output
 }
-
-#[intern]
-fn @matrix_avg_pool_f32 (manager: PassManager, input: Tensor3[f32], shape: &[i64], stride: &[i64], padding: &[i64]) = @matrix_avg_pool(manager, input, shape, stride, padding);

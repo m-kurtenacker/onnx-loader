@@ -1,32 +1,23 @@
 #[export] static mut time_relu : i64;
 
-fn @matrix_relu (manager: PassManager, mat: Tensor3[f32]) -> Tensor3[f32] {
+#[intern]
+fn @matrix_relu (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) -> Tensor3[f32] {
     let start = get_micro_time();
 
-    let output = @alloc_tensor_layout_3[f32](manager, mat.size, AllocLayout::KCR);
+    let output_size_fixed = [ output_size(0), output_size(1), output_size(2)];
+    let output = @alloc_tensor_layout_3[f32](manager, output_size_fixed, AllocLayout::RCK);
 
-    /*let dims_buffer = manager.alloc(sizeof[i64]() * 3 as i64);
-    let dims = bitcast[&mut [i64]](dims_buffer.data);
-    for index in unroll(0, 3) {
-        dims(index) = mat.size(index);
-    }*/
-
-    //for instance in multi_loop (manager, 3, dims) {
     for x in range(0, mat.size(0) as i32) {
-    for y in range(0, mat.size(1) as i32) {
-    for z in range(0, mat.size(2) as i32) {
-        let d = *mat.access_fn([x as i64, y as i64, z as i64]);
-        let r = if d < 0 { 0 as f32 } else { d };
-        *output.access_fn([x as i64, y as i64, z as i64]) = r;
-    }}}
-    //}
-
-    //manager.release(dims_buffer);
+        for y in range(0, mat.size(1) as i32) {
+            for z in range(0, mat.size(2) as i32) {
+                let d = *mat.access_fn([x as i64, y as i64, z as i64]);
+                let r = if d < 0 { 0 as f32 } else { d };
+                *output.access_fn([x as i64, y as i64, z as i64]) = r;
+            }
+        }
+    }
 
     time_relu += get_micro_time() - start;
 
     output
 }
-
-#[intern]
-fn @matrix_relu_f32 (manager: PassManager, mat: Tensor3[f32]) = @matrix_relu(manager, mat);

@@ -1,27 +1,19 @@
 #[export] static mut time_lrn : i64;
 
-fn @matrix_lrn (manager: PassManager, mat: Tensor3[f32]) -> Tensor3[f32] {
+fn @matrix_lrn (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) -> Tensor3[f32] {
     let start = get_micro_time();
 
-    let output = @alloc_tensor_layout_3[f32](manager, mat.size, AllocLayout::KCR);
-
-    //let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-    //let dims = bitcast[&mut [i64]](dims_buffer.data);
-    let mut dims : [i64 * 3];
-    for index in unroll(0, 3) {
-        dims(index) = mat.size(index);
-    }
+    let output_size_fixed = [output_size(0), output_size(1), output_size(2)];
+    let output = @alloc_tensor_layout_3[f32](manager, output_size_fixed, AllocLayout::RCK);
 
     let num_chan = mat.size(2) as i32;
 
-    for instance in multi_loop (manager, 3, dims) {
+    for instance in multi_loop (manager, 3, output_size) {
         let chan  = instance.index(2) as i32;
 
         let start = if 0 > chan - 2 { 0 } else { chan - 2 };
         let stop = if num_chan - 1 < chan + 2 { num_chan - 1 } else { chan + 2 };
 
-        //let index_copy_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
-        //let index_copy = bitcast[&mut [i64]](index_copy_buffer.data);
         let mut index_copy : [i64 * 3];
 
         index_copy(0) = instance.index(0);
@@ -40,13 +32,12 @@ fn @matrix_lrn (manager: PassManager, mat: Tensor3[f32]) -> Tensor3[f32] {
         let alpha = 0.0001 : f32;
         let beta = 0.75 : f32;
         let bias = 1 : f32; // == k in pytorch
-        let index = [instance.index(0), instance.index(1), instance.index(2)];
-        let d = *mat.access_fn(index);
-        let r = d / math_builtins::pow(bias + alpha / 5 * sqr_sum, beta);
-        *output.access_fn(index) = r;
-    }
 
-    //manager.release(dims_buffer);
+        let index_fixed = [instance.index(0), instance.index(1), instance.index(2)];
+        let d = *mat.access_fn(index_fixed);
+        let r = d / math_builtins::pow(bias + alpha / 5 * sqr_sum, beta);
+        *output.access_fn(index_fixed) = r;
+    }
 
     time_lrn += get_micro_time() - start;
 
@@ -54,4 +45,4 @@ fn @matrix_lrn (manager: PassManager, mat: Tensor3[f32]) -> Tensor3[f32] {
 }
 
 #[intern]
-fn @matrix_lrn_f32 (manager: PassManager, mat: Tensor3[f32]) = @matrix_lrn(manager, mat);
+fn @matrix_lrn_f32 (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) = @matrix_lrn(manager, mat, output_size);

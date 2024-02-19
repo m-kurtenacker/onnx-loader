@@ -5,9 +5,6 @@ import onnx
 #ONNX_MODEL = "../mnist-example/mnist_cnn.onnx"
 ONNX_MODEL = "../onnx-model-zoo/validated/vision/body_analysis/age_gender/models/gender_googlenet.onnx"
 
-model = onnx.load(ONNX_MODEL)
-graph = model.graph
-
 from pythorin import *
 
 try:
@@ -18,6 +15,12 @@ except ImportError:
 
 import sys
 sys.setrecursionlimit(5000)
+
+
+model = onnx.load(ONNX_MODEL)
+graph = model.graph
+infered_model = onnx.shape_inference.infer_shapes(model)
+
 
 #Setup all types that are required in the network execution stack
 mem_type = ThorinMemType()
@@ -110,17 +113,17 @@ with Thorin("network") as network:
     load_tensor4_into = network.find_imported_def("load_tensor4_into")
 
     mat_flatten = network.find_imported_def("matrix_flatten_f32")
-    mat_mul = network.find_imported_def("matrix_multiply_f32")
-    mat_add = network.find_imported_def("matrix_add_f32")
-    mat_relu = network.find_imported_def("matrix_relu_f32")
+    mat_mul = network.find_imported_def("matrix_multiply")
+    mat_add = network.find_imported_def("matrix_add")
+    mat_relu = network.find_imported_def("matrix_relu")
     mat_lrn = network.find_imported_def("matrix_lrn_f32")
     mat_gemm = network.find_imported_def("matrix_gemm_f32")
-    mat_softmax = network.find_imported_def("matrix_softmax_f32")
-    mat_log_softmax = network.find_imported_def("matrix_log_softmax_f32")
+    mat_softmax = network.find_imported_def("matrix_softmax")
+    mat_log_softmax = network.find_imported_def("matrix_log_softmax")
     mat_reshape = network.find_imported_def("matrix_reshape_f32")
-    mat_conv = network.find_imported_def("matrix_convolution_f32")
-    mat_max_pool = network.find_imported_def("matrix_max_pool_f32")
-    mat_avg_pool = network.find_imported_def("matrix_avg_pool_f32")
+    mat_conv = network.find_imported_def("matrix_convolution_padded")
+    mat_max_pool = network.find_imported_def("matrix_max_pool")
+    mat_avg_pool = network.find_imported_def("matrix_avg_pool")
     mat_dropout = network.find_imported_def("matrix_dropout_f32")
 
     mat_concat = network.find_imported_def("matrix_concat4_f32")
@@ -195,6 +198,18 @@ with Thorin("network") as network:
                     return onnx_node.name
 
             def build_node(onnx_node):
+                #Gather the output shape for all nodes.
+                output_shape = []
+                if onnx_node.output[0] == output_name:
+                    output_shape = [x.dim_value for x in graph.output[0].type.tensor_type.shape.dim][1:]
+                else:
+                    for info in infered_model.graph.value_info:
+                        if info.name == onnx_node.output[0]:
+                            output_shape = [x.dim_value for x in info.type.tensor_type.shape.dim][1:]
+                            output_shape.reverse()
+                            break
+                assert(output_shape != [])
+
                 #Used to gather additional attributes that might be needed, e.g. padding
                 def get_attributes(*args):
                     results = [None for _ in range(0, len(args))]
@@ -232,15 +247,16 @@ with Thorin("network") as network:
                         update_node = {"result": result_tuple, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tuple)}
                         nodes.update({onnx_node.output[0] : update_node})
                         return onnx_node.output[0]
-                elif onnx_node.op_type == "MaxPool" or "max_pool" in onnx_node.op_type or onnx_node.op_type == "AveragePool":
 
+                elif onnx_node.op_type == "Conv" or "conv" in onnx_node.op_type or onnx_node.op_type == "MaxPool" or "max_pool" in onnx_node.op_type or onnx_node.op_type == "AveragePool":
                     shape, strides, padding = get_attributes("kernel_shape", "strides", "pads")
 
                     shape_global = convert_to_global_array(shape, i64_type)
                     stride_global = convert_to_global_array(strides, i64_type)
                     padding_global = convert_to_global_array(padding[2:], i64_type)
+                    output_shape_global = convert_to_global_array(output_shape, i64_type)
 
-                    attributes = [shape_global, stride_global, padding_global]
+                    attributes = [output_shape_global, shape_global, stride_global, padding_global]
 
                     thorin_operation = translate_operation(onnx_node)
                     return_fn_type = thorin_operation.type.args[-1]
@@ -258,8 +274,12 @@ with Thorin("network") as network:
                     thorin_operation = translate_operation(onnx_node)
                     return_fn_type = thorin_operation.type.args[-1]
 
+                    output_shape_global = convert_to_global_array(output_shape, i64_type)
+
+                    attributes = [output_shape_global]
+
                     with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
-                        call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], return_cont)
+                        call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
                         update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor)}
