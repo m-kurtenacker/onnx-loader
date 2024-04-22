@@ -3,4 +3,4 @@
 	url = https://github.com/onnx/onnx
 [submodule "pythorin"]
 	path = pythorin
-	url = ssh://git@galadriel.kurdi.dedyn.io:2222/DFKI/pythorin.git
+	url = https://github.com/m-kurtenacker/pythorin.git

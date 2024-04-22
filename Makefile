@@ -31,7 +31,7 @@ venv:
 
 plugin/build: onnx_c/install
 	mkdir -p plugin/build
-	cd plugin/build && cmake .. -DONNX_DIR=`pwd`/../../onnx_c/install/lib/cmake/ONNX
+	cd plugin/build && cmake .. -DCMAKE_BUILD_TYPE=Debug -DONNX_DIR=`pwd`/../../onnx_c/install/lib/cmake/ONNX
 
 plugin/build/loader.so: plugin/load.cpp plugin/memory.cpp plugin/build
 	@make -C plugin/build all
@@ -52,7 +52,6 @@ main-compiled.thorin.json: main.thorin.json plugin/build/loader.so
 		main.thorin.json \
 		--pass cleanup \
 		--pass lower2cff \
-		--pass plugin_execute \
 		--pass cleanup \
 		--plugin plugin/build/loader.so \
 		--keep-intern run_network \
@@ -83,7 +82,7 @@ network-sup.thorin.json: sequential.art mat.art mat_ops/*.art network.art
 network-4a.thorin.json: network-sup.thorin.json
 	anyopt \
 		$^ \
-		--pass cleanup \
+		--pass cleanup_fix_point \
 		--emit-json \
 		--log-level ${LOG_LEVEL} \
 		-o network-4a
@@ -92,7 +91,7 @@ network-4a.thorin.json: network-sup.thorin.json
 network-combined.thorin.json: network-tools.thorin.json network.thorin.json
 	anyopt \
 		$^ \
-		--pass cleanup \
+		--pass cleanup_fix_point \
 		--keep-intern run_network \
 		--emit-json \
 		--log-level ${LOG_LEVEL} \
@@ -103,7 +102,6 @@ network-compiled.thorin.json: network-combined.thorin.json plugin/build/loader.s
 		network-combined.thorin.json \
 		--pass cleanup \
 		--pass lower2cff \
-		--pass plugin_execute \
 		--pass cleanup \
 		--plugin plugin/build/loader.so \
 		--emit-json \
