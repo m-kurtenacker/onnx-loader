@@ -115,7 +115,7 @@ fn @release_buffer_managed(buffer : Buffer) {
 }*/
 
 #[import(cc = "C", name = "load_matrix_dynamic")] fn load_matrix_dynamic(_tensor: &mut[f32], _file_name: &[u8], _matrix_name: &[u8]) -> ();
-#[import(cc = "plugin", name = "static_alloca")] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
+#[import(cc = "plugin", name = "static_alloca")] fn @(?size) static_alloca(size : i64) -> (fn() -> &mut [i8]);
 
 #[intern]
 fn load_matrix_into(tensor: Tensor[f32], file_name: &[u8], matrix_name: &[u8]) -> (fn () -> ()) {
@@ -171,7 +171,7 @@ fn load_tensor4_into(tensor: Tensor4[f32], file_name: &[u8], matrix_name: &[u8])
 //#[import(cc = "plugin", name = "static_alloca", depends = load_matrix_into)] fn static_alloca(_size : i64) -> (fn() -> &mut [i8]);
 #[import(cc = "plugin", name = "static_release")] fn static_release(&mut [i8]) -> (fn() -> ());
 
-#[import (cc = "plugin", name = "build_dynamic_array")] fn dynamic_array [T] (_element: T, _size: i64) -> (fn() -> &mut [T]);
+#[import (cc = "plugin", name = "build_dynamic_array")] fn @(?size) dynamic_array [T] (_element: T, size: i64) -> (fn() -> &mut [T]);
 
 fn @get_buffer_managed(min_size: i64) = Buffer {
     data = static_alloca(min_size)(),
@@ -295,7 +295,7 @@ fn @alloc_tensor_layout_1[T] (manager: PassManager, size : [i64 * 1], layout : A
     }
 }
 
-#[intern] fn @alloc_tensor_1_f32 (manager: PassManager, size : [i64 * 1]) = @alloc_tensor_layout_1[f32](manager, size, AllocLayout::KCR);
+#[intern] fn @alloc_tensor_1_f32 (manager: PassManager, size : [i64 * 1]) = @alloc_tensor_layout_1[f32](manager, size, AllocLayout::RCK);
 #[intern] fn @alloc_initializer_1_f32 (manager: PassManager, size : [i64 * 1]) = @alloc_tensor_layout_1[f32](manager, size, AllocLayout::RCK);
 
 fn @alloc_tensor_layout_2[T] (manager: PassManager, size : [i64 * 2], layout : AllocLayout) -> Tensor2[T] {
@@ -332,7 +332,7 @@ fn @alloc_tensor_layout_2[T] (manager: PassManager, size : [i64 * 2], layout : A
     }
 }
 
-#[intern] fn @alloc_tensor_2_f32 (manager: PassManager, size : [i64 * 2]) = @alloc_tensor_layout_2[f32](manager, size, AllocLayout::KCR);
+#[intern] fn @alloc_tensor_2_f32 (manager: PassManager, size : [i64 * 2]) = @alloc_tensor_layout_2[f32](manager, size, AllocLayout::RCK);
 #[intern] fn @alloc_initializer_2_f32 (manager: PassManager, size : [i64 * 2]) = @alloc_tensor_layout_2[f32](manager, size, AllocLayout::RCK);
 
 fn @alloc_tensor_layout_3[T] (manager: PassManager, size : [i64 * 3], layout : AllocLayout) -> Tensor3[T] {
@@ -369,7 +369,7 @@ fn @alloc_tensor_layout_3[T] (manager: PassManager, size : [i64 * 3], layout : A
     }
 }
 
-#[intern] fn @alloc_tensor_3_f32 (manager: PassManager, size : [i64 * 3]) = @alloc_tensor_layout_3[f32](manager, size, AllocLayout::KCR);
+#[intern] fn @alloc_tensor_3_f32 (manager: PassManager, size : [i64 * 3]) = @alloc_tensor_layout_3[f32](manager, size, AllocLayout::RCK);
 #[intern] fn @alloc_initializer_3_f32 (manager: PassManager, size : [i64 * 3]) = @alloc_tensor_layout_3[f32](manager, size, AllocLayout::RCK);
 
 fn @alloc_tensor_layout_4[T] (manager: PassManager, size : [i64 * 4], layout : AllocLayout) -> Tensor4[T] {
@@ -426,7 +426,7 @@ struct LoopInstance {
     mode : &[LoopMode]
 }
 
-#[import (cc = "plugin", name = "build_static_array")] fn static_array [T] (_element: T, _size: i64) -> &[T];
+#[import (cc = "plugin", name = "build_static_array")] fn @(?size) static_array [T] (_element: T, size: i64) -> &[T];
 #[import (cc = "plugin", name = "static_array_set_element", depends = static_array[T])] fn static_array_set_element [T] (_element: &T, _value: T) -> ();
 
 fn @make_loopinstance(manager : PassManager, num_dims : i32, n : &[i64]) -> LoopInstance {

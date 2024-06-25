@@ -1,9 +1,15 @@
 import onnx
 
+import sys
+
 #ONNX_MODEL = "../mnist-example/mnist.onnx"
 #ONNX_MODEL = "../mnist-example/mnist_linear.onnx"
 #ONNX_MODEL = "../mnist-example/mnist_cnn.onnx"
-ONNX_MODEL = "../onnx-model-zoo/validated/vision/body_analysis/age_gender/models/gender_googlenet.onnx"
+#ONNX_MODEL = "../onnx-models/onnx-model-zoo/validated/vision/body_analysis/age_gender/models/gender_googlenet.onnx"
+
+assert(len(sys.argv) >= 2)
+ONNX_MODEL = sys.argv[1]
+print("converting", ONNX_MODEL)
 
 from pythorin import *
 
@@ -94,7 +100,7 @@ def convert_to_global_array(input_array, thorin_type):
 
 
 with Thorin("network") as network:
-    network.include("network-tools.thorin.json")
+    network.include("network_tools.thorin.json")
 
     sequential = network.find_imported_def("sequential")
 
@@ -261,8 +267,11 @@ with Thorin("network") as network:
                     thorin_operation = translate_operation(onnx_node)
                     return_fn_type = thorin_operation.type.args[-1]
 
+                    #with ThorinContinuation(ThorinFnType([mem_type, passmanager_type, tensor_3_type, tensor_4_type, tensor_1_type, return_fn_type])) as (specialized_operation, specialized_mem, pm, input_tensor, weight_tensor, bias_tensor, return_cont):
+                    #    specialized_operation(thorin_operation, specialized_mem, pm, input_tensor, weight_tensor, bias_tensor, *attributes, return_cont)
 
                     with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
+                        #call_function = lambda in_cont, in_mem: in_cont(specialized_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], return_cont)
                         call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
@@ -291,15 +300,9 @@ with Thorin("network") as network:
             initializer_nodes = []
 
             input_name = graph.input[0].name
-
             output_name = graph.output[0].name
-            #output_name = "conv1/7x7_s2_Y"
-            #output_name = "conv2/norm2_Y"
-            #output_name = "pool2/3x3_s2_Y"
-            #output_name = "inception_3a/output_Y"
-            #output_name = "inception_5b/output_Y"
 
-            image_dims = [224, 224, 3]
+            image_dims = [28, 28, 1]
 
             local_copy = False
             if local_copy:

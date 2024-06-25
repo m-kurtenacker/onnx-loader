@@ -76,7 +76,9 @@ fn read_train() -> &[image_item] {
 fn read_test() -> &[image_item] {
     let mut images: &[u8];
     let imagespp = &mut images;
-    read_images("/home/matthiask/Documents/test/networks/onnx-model-zoo/validated/vision/body_analysis/age_gender/dependencies/data.ubyte", imagespp);
+    //read_images("/home/matthiask/Documents/test/networks/onnx-model-zoo/validated/vision/body_analysis/age_gender/dependencies/data.ubyte", imagespp);
+    //read_images("/home/matthias/Documents/test/networks/onnx-models/onnx-model-zoo/validated/vision/body_analysis/age_gender/dependencies/data.ubyte", imagespp);
+    read_images("/home/matthias/Documents/DFKI/test/networks/onnx-loader/mnist-data/t10k-images-idx3-ubyte", imagespp);
 
     let t = runtime_alloc(0, sizeof[image_item]() * 1);
     let items = bitcast[&mut[image_item]](t);

@@ -1,6 +1,2 @@
-plugin/build
-*.thorin.json
-*.ll
-a.out
-venv
-__pycache__/
+/build/
+/mnist-data/*-ubyte
