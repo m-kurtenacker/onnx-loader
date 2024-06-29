@@ -4,7 +4,7 @@ include(FetchContent)
 
 FetchContent_Declare(onnx
     GIT_REPOSITORY https://github.com/onnx/onnx
-    GIT_TAG 5be7f3164ba0b2c323813264ceb0ae7e929d2350
+    GIT_TAG origin/main
     FIND_PACKAGE_ARGS
 )
 message(STATUS "Making ONNX available...")
