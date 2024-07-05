@@ -1,33 +1,35 @@
 #[intern]
-fn @matrix_avg_pool (manager: PassManager, input: Tensor3[f32], output_size: &[i64], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor3[f32] {
+fn @matrix_avg_pool (manager: PassManager, input: Tensor[f32], output_size: &[i64], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor[f32] {
     /* input shape:  [ X x Y x chan ]
        ~output shape: [ X/xk x Y/yk x chan ]
     */
 
-    let output_size_fixed = [output_size(0), output_size(1), output_size(2)];
-    let output = @alloc_tensor_layout_3[f32](manager, output_size_fixed, AllocLayout::RCK);
+    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
+
+    let output = @alloc_tensor[f32](manager, input.num_dims, output_size_fn);
 
     let mut kernel_size = 1 : i64;
-    for index in unroll(0, 2) {
+    for index in unroll(0, input.num_dims) {
         kernel_size *= shape(index);
     }
 
-    for inst_out in multi_loop(manager, 3, output_size) {
-        let mut input_dims : [i64 * 3];
+    for inst_out in multi_loop(manager, input.num_dims, output_size) {
+        let input_dims_buffer = manager.alloc_dynamic(0 : i64, input.num_dims as i64);
+        let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
 
         let chanel = inst_out.index(2);
         input_dims(2) = chanel;
 
         let mut sum = 0 : f32;
 
-        for kernel_instance in multi_loop(manager, 2, shape) {
-            for i in unroll(0, 2) {
+        for kernel_instance in multi_loop(manager, input.num_dims - 1, shape) {
+            for i in unroll(0, input.num_dims - 1) {
                 input_dims(i) = inst_out.index(i) * stride(i) - padding(i) + kernel_instance.index(i);
                 if input_dims(i) < 0 {
                     input_dims(i) = 0;
                 }
-                if input_dims(i) >= input.size(i) {
-                    input_dims(i) = input.size(i) - 1;
+                if input_dims(i) >= input.size_fn(i) {
+                    input_dims(i) = input.size_fn(i) - 1;
                 }
             }
 

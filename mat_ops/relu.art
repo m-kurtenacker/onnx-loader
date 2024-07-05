@@ -1,15 +1,15 @@
 #[export] static mut time_relu : i64;
 
 #[intern]
-fn @matrix_relu (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) -> Tensor3[f32] {
+fn @matrix_relu (manager: PassManager, mat: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
     let start = get_micro_time();
 
-    let output_size_fixed = [ output_size(0), output_size(1), output_size(2)];
-    let output = @alloc_tensor_layout_3[f32](manager, output_size_fixed, AllocLayout::RCK);
+    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
+    let output = @alloc_tensor_layout[f32](manager, 3, output_size_fn, AllocLayout::RCK);
 
-    for x in range(0, mat.size(0) as i32) {
-        for y in range(0, mat.size(1) as i32) {
-            for z in range(0, mat.size(2) as i32) {
+    for x in range(0, mat.size_fn(0) as i32) {
+        for y in range(0, mat.size_fn(1) as i32) {
+            for z in range(0, mat.size_fn(2) as i32) {
                 let d = *mat.access_fn([x as i64, y as i64, z as i64]);
                 let r = if d < 0 { 0 as f32 } else { d };
                 *output.access_fn([x as i64, y as i64, z as i64]) = r;

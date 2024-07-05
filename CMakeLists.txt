@@ -7,7 +7,12 @@ find_package(AnyDSL_runtime REQUIRED)
 include(cmake/anydsl-macros.cmake)
 include(cmake/onnx-package.cmake)
 
-set(TARGET_NETWORK ${CMAKE_CURRENT_SOURCE_DIR}/../mnist-example/mnist_cnn.onnx CACHE STRING "The target network to compile")
+set(TARGET_NETWORK ${CMAKE_CURRENT_SOURCE_DIR}/mnist-example/mnist_cnn.onnx CACHE STRING "The target network to compile")
+set(TARGET_IMAGES ${CMAKE_CURRENT_SOURCE_DIR}/mnist-data/train-images-idx3-ubyte CACHE STRING "The target network to compile")
+set(TARGET_LABELS ${CMAKE_CURRENT_SOURCE_DIR}/mnist-data/train-labels-idx1-ubyte CACHE STRING "The target network to compile")
+
+configure_file(utils/config.h.in ${CMAKE_BINARY_DIR}/include/config.h @ONLY)
+include_directories(${CMAKE_BINARY_DIR}/include)
 
 file(GLOB MAT_OPS mat_ops/*.art)
 
@@ -74,3 +79,5 @@ target_link_libraries(loader_runtime PUBLIC onnx)
 
 add_executable(main ${MAIN_PROG_OBJ} utils/read.cpp utils/allocator.cpp)
 target_link_libraries(main loader_runtime ${AnyDSL_runtime_LIBRARIES})
+
+add_subdirectory(testing)

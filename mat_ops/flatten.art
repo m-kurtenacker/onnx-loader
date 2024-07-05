@@ -1,23 +1,32 @@
-fn @matrix_flatten[T] (manager: PassManager, mat: Tensor3[T], output_size: &[i64]) -> Tensor1[T] {
-    let output_size_fixed = [output_size(0)];
+fn @matrix_flatten[T] (manager: PassManager, mat: Tensor[T], output_size: &[i64]) -> Tensor[T] {
+    let new_access_fn = @|n : &[i64]| {
+        let mut address = n(0);
 
-    let new_access_fn = @|n : [i64 * 1]| {
-        let x = n(0) % mat.size(0);
-        let y = (n(0) / mat.size(0)) % mat.size(1);
-        let c = (n(0) / mat.size(0)) / mat.size(1);
+        let oldworld_address_buffer = manager.alloc_dynamic(0 : i64, mat.num_dims as i64);
+        let mut oldworld_address = bitcast[&mut[i64]](oldworld_address_buffer.data);
 
-        mat.access_fn([x, y, c])
+        for i in unroll(0, mat.num_dims) {
+            let index = address % mat.size_fn(i);
+            oldworld_address(i) = index;
+
+            address = address / mat.size_fn(i);
+        }
+
+        mat.access_fn(oldworld_address)
     };
 
-    Tensor1[T] {
+    fn output_size_fn(n : i32) { output_size(n) };
+
+    Tensor[T] {
         buffer = mat.buffer,
-        size = output_size_fixed,
+        num_dims = 1,
+        size_fn = output_size_fn,
         access_fn = new_access_fn
     }
 }
 
 #[intern]
-fn @matrix_flatten_f32 (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) {
+fn @matrix_flatten_f32 (manager: PassManager, mat: Tensor[f32], output_size: &[i64]) {
     let output = @matrix_flatten[f32](manager, mat, output_size);
 
     output

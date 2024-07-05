@@ -1,4 +1,107 @@
-static print_enable = false;
+/* Tensor base definition and some utils. */
+
+struct Tensor[T] {
+    buffer : Buffer,
+    num_dims : i32,
+    size_fn: fn(i32) -> i64,
+    access_fn: fn(&[i64]) -> &mut T
+}
+
+fn @translate_tensor_size[T] (manager: PassManager, t : Tensor[T]) -> &[i64] {
+    let buffer = manager.alloc_dynamic(0 : i64, t.num_dims as i64);
+
+    let r = bitcast[&mut[i64]](buffer.data);
+
+    for i in range(0, t.num_dims) {
+        r(i) = t.size_fn(i);
+    }
+
+    r
+}
+
+fn @sub_tensor[T] (manager: PassManager, input : Tensor[T], lower_bounds : &[i64], upper_bounds : &[i64]) -> Tensor[T] {
+    let new_size_fn = @|i: i32| { upper_bounds(i) - lower_bounds(i) };
+
+    let new_access_fn = |n : &[i64]| {
+        let new_address_buffer = manager.alloc(sizeof[i64]() * input.num_dims as i64);
+        let new_address = bitcast[&mut[i64]](new_address_buffer.data);
+
+        for i in unroll(0, input.num_dims) {
+            new_address(i) = n(i) + lower_bounds(i);
+        }
+
+        input.access_fn(new_address)
+    };
+
+    Tensor[T] {
+        buffer = input.buffer,
+        num_dims = input.num_dims,
+        size_fn = new_size_fn,
+        access_fn = new_access_fn
+    }
+}
+
+/* Allocate and Release tensors, with different memory layouts as needed */
+
+enum AllocLayout {
+    RCK,
+    KCR
+}
+
+fn @alloc_tensor_layout[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64, layout : AllocLayout) -> Tensor[T] {
+    let mut size = 1 as i64;
+    for i in unroll (0, num_dims) {
+        size *= size_fn(i);
+    }
+
+    let buffer = @manager.alloc(sizeof[T]() * size);
+
+    let access_fn_rck = |n : &[i64]| {
+        let mut address = n(num_dims - 1);
+        for i in unroll(0, num_dims - 1) {
+            address = address * size_fn(num_dims - 2 - i) + n(num_dims - 2 - i);
+        }
+        &mut bitcast[&mut[T]](buffer.data)(address)
+    };
+
+    let access_fn_kcr = |n : &[i64]| {
+        let mut address = n(0);
+        for i in unroll(1, num_dims) {
+            address = address * size_fn(i) + n(i);
+        }
+        &mut bitcast[&mut[T]](buffer.data)(address)
+    };
+
+    Tensor[T] {
+        buffer = buffer,
+        num_dims = num_dims,
+        size_fn = size_fn,
+        access_fn = match layout {
+            AllocLayout::KCR => access_fn_kcr,
+            AllocLayout::RCK => access_fn_rck,
+        }
+    }
+}
+
+fn release_tensor[T] (manager: PassManager, mat : Tensor[T]) -> () {
+    manager.release(mat.buffer);
+}
+
+fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) = @alloc_tensor_layout[T](manager, num_dims, size_fn, AllocLayout::KCR);
+/*fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> i64) -> Tensor[T] {
+    select(num_dims > 1 && size_fn(1) == 12,
+            @alloc_tensor_layout[T](manager, num_dims, size_fn, AllocLayout::RCK),
+            @alloc_tensor_layout[T](manager, num_dims, size_fn, AllocLayout::KCR))
+}*/
+
+#[intern] fn @alloc_tensor_f32 (manager: PassManager, num_dims: i32, size_fn : fn(i32) -> i64) = @alloc_tensor[f32](manager, num_dims, size_fn);
+//#[intern] fn release_tensor_f32 (manager: PassManager, mat : Tensor[f32]) = release_tensor[f32](manager, mat);
+
+#[intern] fn @alloc_initializer_f32 (manager: PassManager, num_dims: i32, size_fn : fn(i32) -> i64) = @alloc_tensor_layout[f32](manager, num_dims, size_fn, AllocLayout::RCK);
+
+/* For debuggung output */
+
+static print_enable = true;
 
 fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
     if (print_enable) {
@@ -42,76 +145,6 @@ fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
             }
         } else {
             print_string("Printing error: too many dimensions\n");
-        }
-    }
-}
-
-fn print_tensor_1 (name: &[u8], mat: Tensor1[f32]) -> () {
-    if (print_enable) {
-        print_string("Tensor ");
-        print_string(name);
-        print_string(" [");
-        for i in range(0, 1 - 1) {
-            print_i64(mat.size(i));
-            print_string(" x ");
-        }
-        print_i64(mat.size(1 - 1));
-        print_string("]:\n");
-
-        for x in range(0, mat.size(0) as i32) {
-            print_f32(*mat.access_fn([x as i64]));
-            print_string(" ");
-        }
-        print_string("\n");
-    }
-}
-
-fn print_tensor_2 (name: &[u8], mat: Tensor2[f32]) -> () {
-    if (print_enable) {
-        print_string("Tensor ");
-        print_string(name);
-        print_string(" [");
-        for i in range(0, 2 - 1) {
-            print_i64(mat.size(i));
-            print_string(" x ");
-        }
-        print_i64(mat.size(2 - 1));
-        print_string("]:\n");
-
-        for y in range(0, mat.size(1) as i32) {
-            for x in range(0, mat.size(0) as i32) {
-                print_f32(*mat.access_fn([x as i64, y as i64]));
-                print_string(" ");
-            }
-            print_string("\n");
-        }
-    }
-}
-
-fn print_tensor_3 (name: &[u8], mat: Tensor3[f32]) -> () {
-    if (print_enable) {
-        print_string("Tensor ");
-        print_string(name);
-        print_string(" [");
-        for i in range(0, 3 - 1) {
-            print_i64(mat.size(i));
-            print_string(" x ");
-        }
-        print_i64(mat.size(3 - 1));
-        print_string("]:\n");
-
-        for chan in range(0, mat.size(2) as i32) {
-            print_string("chan_");
-            print_i32(chan);
-            print_string(":\n");
-
-            for y in range(0, mat.size(1) as i32) {
-                for x in range(0, mat.size(0) as i32) {
-                    print_f32(*mat.access_fn([x as i64, y as i64, chan as i64]));
-                    print_string(" ");
-                }
-                print_string("\n");
-            }
         }
     }
 }

@@ -1,6 +1,6 @@
-fn @matrix_dropout [T](_manager: PassManager, mat: Tensor3[T], _output_size: &[i64]) -> Tensor3[T] {
+fn @matrix_dropout [T](_manager: PassManager, mat: Tensor[T], _output_size: &[i64]) -> Tensor[T] {
     mat
 }
 
 #[intern]
-fn @matrix_dropout_f32 (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) = @matrix_dropout[f32](manager, mat, output_size);
+fn @matrix_dropout_f32 (manager: PassManager, mat: Tensor[f32], output_size: &[i64]) = @matrix_dropout[f32](manager, mat, output_size);

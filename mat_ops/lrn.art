@@ -1,12 +1,12 @@
 #[export] static mut time_lrn : i64;
 
-fn @matrix_lrn (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) -> Tensor3[f32] {
+fn @matrix_lrn (manager: PassManager, mat: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
     let start = get_micro_time();
 
-    let output_size_fixed = [output_size(0), output_size(1), output_size(2)];
-    let output = @alloc_tensor_layout_3[f32](manager, output_size_fixed, AllocLayout::RCK);
+    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
+    let output = @alloc_tensor_layout[f32](manager, 3, output_size_fn, AllocLayout::RCK);
 
-    let num_chan = mat.size(2) as i32;
+    let num_chan = mat.size_fn(2) as i32;
 
     for instance in multi_loop (manager, 3, output_size) {
         let chan  = instance.index(2) as i32;
@@ -45,4 +45,4 @@ fn @matrix_lrn (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) ->
 }
 
 #[intern]
-fn @matrix_lrn_f32 (manager: PassManager, mat: Tensor3[f32], output_size: &[i64]) = @matrix_lrn(manager, mat, output_size);
+fn @matrix_lrn_f32 (manager: PassManager, mat: Tensor[f32], output_size: &[i64]) = @matrix_lrn(manager, mat, output_size);

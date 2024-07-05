@@ -1,17 +1,18 @@
 #[export] static mut time_add : i64;
 
 #[intern]
-fn @matrix_add (manager: PassManager, matA: Tensor1[f32], matB: Tensor1[f32], output_size: &[i64]) -> Tensor1[f32] {
+fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
     let start = get_micro_time();
 
-    let output_size_fixed = [output_size(0)];
-    let output = @alloc_tensor_layout_1[f32](manager, output_size_fixed, AllocLayout::RCK);
+    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
 
-    for i in vector_range (0, output_size(0) as i32) {
-        let A = *matA.access_fn([i as i64]);
-        let B = *matB.access_fn([i as i64]);
+    let output = @alloc_tensor[f32](manager, matA.num_dims, output_size_fn);
 
-        *output.access_fn([i as i64]) = A + B;
+    for instance in multi_loop (manager, matA.num_dims, output_size) {
+        let A = *matA.access_fn(instance.index);
+        let B = *matB.access_fn(instance.index);
+
+        *output.access_fn(instance.index) = A + B;
     }
 
     time_add += get_micro_time() - start;

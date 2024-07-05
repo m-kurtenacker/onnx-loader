@@ -4,15 +4,14 @@
 fn main () -> i32 {
     let num_tests = 1000;
 
-    //let data_test = read_test();
-    let data_test = read_train();
+    let data = read_data();
 
     print_string("Starting test\n");
 
     let mut sum = 0 as f32;
     let mut run_test = 0 as i64;
     for i in range(0, num_tests) {
-        let image_buffer = data_test(i).image_buffer;
+        let image_buffer = data(i).image_buffer;
         let mut image = bitcast[&mut[f32]](image_buffer.data);
 
         //for i in range(0, 28 * 28) {
@@ -35,12 +34,12 @@ fn main () -> i32 {
             };
 
             let log_softmax_result = result_tensor;
-            sum += @matrix_nllloss(manager, log_softmax_result, data_test(i).label);
+            sum += @matrix_nllloss(manager, log_softmax_result, data(i).label);
 
             //sum += @matrix_nllloss(manager, log_softmax_result, 0);
 
             //let softmax_result = @matrix_softmax_f32(manager, result_tensor);
-            //sum += @matrix_sparsecrossentropy_f32(manager, softmax_result, data_test(i).label);
+            //sum += @matrix_sparsecrossentropy_f32(manager, softmax_result, data(i).label);
 
             run_test += 1;
         }

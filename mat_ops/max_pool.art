@@ -1,11 +1,11 @@
 #[export] static mut time_max_pool : i64;
 
 #[intern]
-fn @matrix_max_pool (manager: PassManager, input: Tensor3[f32], output_size: &[i64], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor3[f32] {
+fn @matrix_max_pool (manager: PassManager, input: Tensor[f32], output_size: &[i64], shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor[f32] {
     let start = get_micro_time();
 
-    let output_size_fixed = [output_size(0), output_size(1), output_size(2)];
-    let output = @alloc_tensor_layout_3[f32](manager, output_size_fixed, AllocLayout::RCK);
+    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
+    let output = @alloc_tensor_layout[f32](manager, 3, output_size_fn, AllocLayout::RCK);
 
     for inst_out in multi_loop(manager, 3, output_size) {
         let mut input_dims : [i64 * 3];
@@ -21,8 +21,8 @@ fn @matrix_max_pool (manager: PassManager, input: Tensor3[f32], output_size: &[i
                 if input_dims(i) < 0 {
                     input_dims(i) = 0;
                 }
-                if input_dims(i) >= input.size(i) {
-                    input_dims(i) = input.size(i) - 1;
+                if input_dims(i) >= input.size_fn(i) {
+                    input_dims(i) = input.size_fn(i) - 1;
                 }
             }
 
