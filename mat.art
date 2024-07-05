@@ -101,7 +101,7 @@ fn @alloc_tensor[T] (manager: PassManager, num_dims : i32, size_fn : fn(i32) -> 
 
 /* For debuggung output */
 
-static print_enable = true;
+static print_enable = false;
 
 fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
     if (print_enable) {

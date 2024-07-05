@@ -45,5 +45,7 @@ fn @matrix_convolution_padded (manager: PassManager, input: Tensor[f32], weight:
 
     time_conv += get_micro_time() - start;
 
+    print_tensor("Conv", output);
+
     output
 }

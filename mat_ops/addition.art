@@ -17,5 +17,7 @@ fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32], outp
 
     time_add += get_micro_time() - start;
 
+    print_tensor("Addition", output);
+
     output
 }

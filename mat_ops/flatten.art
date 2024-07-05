@@ -29,5 +29,7 @@ fn @matrix_flatten[T] (manager: PassManager, mat: Tensor[T], output_size: &[i64]
 fn @matrix_flatten_f32 (manager: PassManager, mat: Tensor[f32], output_size: &[i64]) {
     let output = @matrix_flatten[f32](manager, mat, output_size);
 
+    print_tensor("Flatten", output);
+
     output
 }
