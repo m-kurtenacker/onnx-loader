@@ -1,22 +1,48 @@
-fn @matrix_reshape[T] (_manager: PassManager, mat: Tensor[T], num_output_dims : i32, output_size: &[i64]) -> Tensor[T] {
+static print_reshape = false;
+
+fn @matrix_reshape[T] (manager: PassManager, mat: Tensor[T], num_output_dims : i32, output_size: &[i64]) -> Tensor[T] {
     fn @output_size_fn(n : i32) -> i64 { output_size(n) }
     let new_access_fn = |n : &[i64]| {
         //Build a "linear" address with regards to the new shape.
-        let mut address = n(2);
-        for i in unroll(0, 2) {
-            address = address * output_size(1 - i) + n(1 - i);
+        if print_reshape {
+            print_string("input addr ");
+            for i in unroll(0, num_output_dims) {
+                print_i64(n(i));
+                print_string(" ");
+            }
+            print_string("\n");
+        }
+        let mut address = n(0);
+        for i in unroll(1, num_output_dims) {
+            address = address * output_size(i) + n(i);
+        }
+
+        if print_reshape {
+            print_string("address ");
+            print_i64(address);
+            print_string("\n");
         }
 
         //Unpack the address into an addressing vector for the old matrix.
-        //let oldworld_address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
-        //let oldworld_address = bitcast[&mut [i64]](oldworld_address_buffer.data);
-        let mut oldworld_address : [i64 * 3];
+        let oldworld_address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
+        let oldworld_address = bitcast[&mut [i64]](oldworld_address_buffer.data);
+        //let mut oldworld_address : [i64 * 3];
 
-        for i in unroll(0, 3) {
-            let index = address % mat.size_fn(i);
-            oldworld_address(i) = index;
+        for i in unroll(0, mat.num_dims - 1) {
+            let index = address % mat.size_fn(i + 1);
+            oldworld_address(mat.num_dims - 1 - i) = index;
 
-            address = address / mat.size_fn(i);
+            address = address / mat.size_fn(i + 1);
+        }
+        oldworld_address(0) = address;
+
+        if print_reshape {
+            print_string("oldworld addr ");
+            for i in unroll(0, mat.num_dims) {
+                print_i64(oldworld_address(i));
+                print_string(" ");
+            }
+            print_string("\n");
         }
 
         mat.access_fn(oldworld_address)

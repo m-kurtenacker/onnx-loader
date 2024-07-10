@@ -20,9 +20,9 @@ anydsl_runtime_fancy_wrap(TEST_ADD_OBJ
     FILES ${TEST_REMOVE_INT}
 )
 
-add_executable(test_add ${TEST_ADD_OBJ} ${PROJECT_SOURCE_DIR}/utils/read.cpp ${PROJECT_SOURCE_DIR}/utils/allocator.cpp)
-target_link_libraries(test_add ${AnyDSL_runtime_LIBRARIES})
+add_executable(test_reshape ${TEST_ADD_OBJ} ${PROJECT_SOURCE_DIR}/utils/read.cpp ${PROJECT_SOURCE_DIR}/utils/allocator.cpp)
+target_link_libraries(test_reshape ${AnyDSL_runtime_LIBRARIES})
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/test.idx DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
-add_test(NAME addition_simple COMMAND ${VENV}/bin/python ${CMAKE_CURRENT_SOURCE_DIR}/test.py ${CMAKE_CURRENT_BINARY_DIR} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME reshape_simple COMMAND ${VENV}/bin/python ${CMAKE_CURRENT_SOURCE_DIR}/test.py ${CMAKE_CURRENT_BINARY_DIR} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

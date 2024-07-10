@@ -112,12 +112,8 @@ fn read_idx(filename : &[u8]) -> &[Buffer] {
     let imagespp = &mut images;
     let sizes = read_idx_cpp(filename, imagespp);
 
-    print_string("foo\n");
-
     let t = alloc_cpu(sizeof[Buffer]() * sizes(0));
     let items = bitcast[&mut[Buffer]](t.data);
-
-    print_string("bar\n");
 
     for i in range(0, sizes(0) as i32) {
         items(i) = alloc_cpu(sizeof[&[f32]]() * sizes(1) * sizes(2));
@@ -128,8 +124,6 @@ fn read_idx(filename : &[u8]) -> &[Buffer] {
             image(j) = images(j + i * (sizes(1) * sizes(2)) as i32) as f32 / 256.0;
         }
     }
-
-    print_string("bla\n");
 
     items
 }

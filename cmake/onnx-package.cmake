@@ -15,5 +15,6 @@ find_package(Python REQUIRED COMPONENTS Interpreter)
 add_custom_command(
     OUTPUT ${VENV}
     COMMAND ${Python_EXECUTABLE} -m venv ${VENV}
+    COMMAND ${VENV}/bin/pip install numpy idx2numpy
     COMMAND ${VENV}/bin/pip install -e ${onnx_SOURCE_DIR}/
 )
