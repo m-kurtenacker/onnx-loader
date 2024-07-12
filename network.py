@@ -5,6 +5,10 @@ import sys
 assert(len(sys.argv) >= 2)
 ONNX_MODEL = sys.argv[1]
 print("converting", ONNX_MODEL)
+if len(sys.argv) >= 3:
+    NETWORK_TOOLS_PATH = sys.argv[2]
+else:
+    NETWORK_TOOLS_PATH = "network_tools.thorin.json"
 
 from pythorin import *
 
@@ -92,7 +96,7 @@ def convert_to_global_array(input_array, thorin_type):
 
 
 with Thorin("network") as network:
-    network.include("network_tools.thorin.json")
+    network.include(NETWORK_TOOLS_PATH)
 
     sequential = network.find_imported_def("sequential")
 
