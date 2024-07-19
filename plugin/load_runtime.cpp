@@ -6,8 +6,10 @@
 
 using namespace ONNX_NAMESPACE;
 
-void load_matrix_dynamic_cpp (float * tensor_buffer, char * file_name, char * matrix_name) {
-    if (tensor_buffer[0] != 0) {
+extern "C" {
+
+void load_matrix_dynamic (void * tensor_data_ptr, char * file_name, char * matrix_name) {
+    if (reinterpret_cast<int*>(tensor_data_ptr)[0] != 0) {
         return;
     }
 
@@ -21,7 +23,7 @@ void load_matrix_dynamic_cpp (float * tensor_buffer, char * file_name, char * ma
     //std::cerr << "Loading tensor for initializer " << tensor_name << std::endl;
     const TensorProto * tensor_ptr = nullptr;
 
-    //Found the layer named by callee.
+    //Find the layer named by callee.
     for (int i = 0; i < model.graph().initializer_size(); i++) {
         const TensorProto &init = model.graph().initializer(i);
         if (init.name() == tensor_name) {
@@ -42,7 +44,6 @@ void load_matrix_dynamic_cpp (float * tensor_buffer, char * file_name, char * ma
     assert(tensor_ptr);
 
     auto &tensor = *tensor_ptr;
-    assert(tensor.data_type() == TensorProto_DataType_FLOAT);
 
     //Compute total number of elements to load.
     size_t tensor_num_elements = 1;
@@ -53,19 +54,29 @@ void load_matrix_dynamic_cpp (float * tensor_buffer, char * file_name, char * ma
     }
     //std::cerr << "Tensor has total of " << tensor_num_elements << " elements\n";
 
-    const std::string &data_str = tensor.raw_data();
-    const char * raw_data = data_str.c_str();
-    const float * data_float = (float*) raw_data;
+    if(tensor.data_type() == TensorProto_DataType_INT64) {
+        long long int* tensor_buffer = reinterpret_cast<long long int*>(tensor_data_ptr);
 
-    for (size_t i = 0; i < tensor_num_elements; i++) {
-        tensor_buffer[i] = data_float[i];
+        const std::string &data_str = tensor.raw_data();
+        const char * raw_data = data_str.c_str();
+        const long long int * data_float = reinterpret_cast<const long long int*>(raw_data);
+
+        for (size_t i = 0; i < tensor_num_elements; i++) {
+            tensor_buffer[i] = data_float[i];
+        }
+    } else {
+        assert(tensor.data_type() == TensorProto_DataType_FLOAT);
+
+        float* tensor_buffer = reinterpret_cast<float*>(tensor_data_ptr);
+
+        const std::string &data_str = tensor.raw_data();
+        const char * raw_data = data_str.c_str();
+        const float * data_float = reinterpret_cast<const float*>(raw_data);
+
+        for (size_t i = 0; i < tensor_num_elements; i++) {
+            tensor_buffer[i] = data_float[i];
+        }
     }
-}
-
-extern "C" {
-
-void load_matrix_dynamic(float * tensor, char * file_name, char * matrix_name) {
-    load_matrix_dynamic_cpp(tensor, file_name, matrix_name);
 }
 
 }

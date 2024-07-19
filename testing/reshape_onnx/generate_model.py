@@ -16,12 +16,12 @@ A = make_tensor_value_info('A', TensorProto.FLOAT, [4, 3])
 
 # outputs, the shape is left undefined
 
-Y = make_tensor_value_info('Y', TensorProto.FLOAT, [None, None])
+Y = make_tensor_value_info('Y', TensorProto.FLOAT, [3, 4])
 
 # nodes
 
-reshape_1_size = from_array(np.array([2, 3, 2], dtype=np.int32), name='r1_size')
-reshape_2_size = from_array(np.array([3, 4], dtype=np.int32), name='r2_size')
+reshape_1_size = from_array(np.array([2, 3, 2], dtype=np.int64), name='r1_size')
+reshape_2_size = from_array(np.array([3, 4], dtype=np.int64), name='r2_size')
 
 a = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], dtype=np.float32).reshape(2, 3, 2)
 a = a / 256

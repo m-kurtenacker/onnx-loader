@@ -1,0 +1,30 @@
+#[intern] fn @run_network(_image : &[f32]) -> &[f32];
+
+#[export]
+fn main() -> () {
+    let data = read_idx("test.idx");
+
+    let tensor_a_buffer = data(0);
+    let tensor_a = bitcast[&mut[f32]](tensor_a_buffer.data);
+
+    let tensor_a_t = Tensor[f32] {
+        buffer = tensor_a_buffer,
+        num_dims = 2,
+        size_fn = @|n : i32| { if n == 0 { 4 } else { 3 } },
+        access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_a_buffer.data)(a(0) * 3 + a(1))) }
+    };
+
+    print_tensor_256("Test a", tensor_a_t);
+
+    print_string("Exec network\n");
+
+    let result_data = run_network(tensor_a);
+
+    let result_buffer = Buffer {
+        data = bitcast[&mut[i8]](result_data),
+        size = 0,
+        device = 0
+    };
+
+    write_idx("result.idx", 3, [1, 3, 4], [result_buffer]);
+}

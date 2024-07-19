@@ -83,13 +83,29 @@ fn @release_buffer_managed(buffer : Buffer) {
     release_buffer_internal(buffer.data)
 }*/
 
-#[import(cc = "C", name = "load_matrix_dynamic")] fn load_matrix_dynamic(_tensor: &mut[f32], _file_name: &[u8], _matrix_name: &[u8]) -> ();
+#[import(cc = "C", name = "load_matrix_dynamic")] fn load_matrix_dynamic[T](_tensor: &mut[T], _file_name: &[u8], _matrix_name: &[u8]) -> ();
 #[import(cc = "plugin", name = "static_alloca")] fn @(?size) static_alloca(size : i64) -> (fn() -> &mut [i8]);
 
 #[intern]
-fn load_matrix_into(tensor: Tensor[f32], file_name: &[u8], matrix_name: &[u8]) -> (fn () -> ()) {
+fn load_matrix_into_f32(tensor: Tensor[f32], file_name: &[u8], matrix_name: &[u8]) -> (fn () -> ()) {
     fn load_matrix() {
+        let test = bitcast[&mut[i32]](tensor.buffer.data);
+        test(0) = 0;
+
         let data = bitcast[&mut[f32]](tensor.buffer.data);
+        load_matrix_dynamic(data, file_name, matrix_name);
+    }
+
+    load_matrix
+}
+
+#[intern]
+fn load_matrix_into_i64(tensor: Tensor[i64], file_name: &[u8], matrix_name: &[u8]) -> (fn () -> ()) {
+    fn load_matrix() {
+        let test = bitcast[&mut[i32]](tensor.buffer.data);
+        test(0) = 0;
+
+        let data = bitcast[&mut[i64]](tensor.buffer.data);
         load_matrix_dynamic(data, file_name, matrix_name);
     }
 
@@ -137,7 +153,7 @@ struct LoopInstance {
 
 fn @make_loopinstance(manager : PassManager, num_dims : i32, n : &[i64]) -> LoopInstance {
     let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
-    
+
     LoopInstance {
         manager = manager,
         num_dims = num_dims,
@@ -206,7 +222,7 @@ fn @(?current_dim & ?num_dims) multi_loop_instanced (body: fn(LoopInstance) -> (
 
                     current_instance.index(current_dim) = i as i64 + instance.min(current_dim);
 
-                    //multi_loop_instanced(body, current_dim + 1, num_dims, current_instance);
+                    multi_loop_instanced(body, current_dim + 1, num_dims, current_instance);
                 }
             },
 
