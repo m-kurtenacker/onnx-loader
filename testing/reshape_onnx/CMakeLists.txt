@@ -1,10 +1,12 @@
 # Generate test data on the fly
 add_custom_command(OUTPUT test.idx
     COMMAND ${VENV}/bin/python ${CMAKE_CURRENT_SOURCE_DIR}/generate_data.py
+    DEPENDS generate_data.py ${VENV}
 )
 
 add_custom_command(OUTPUT test.onnx
     COMMAND ${VENV}/bin/python ${CMAKE_CURRENT_SOURCE_DIR}/generate_model.py
+    DEPENDS generate_model.py ${VENV}
 )
 
 
