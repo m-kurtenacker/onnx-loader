@@ -127,12 +127,12 @@ void write_idx(char * filename, size_t * sizes, char * images) {
 
     for (int i = 0; i < 16; i++) {
         int endian_fixed_address = i - (i % 4) + (3 - i % 4);
-        char d = header.data[endian_fixed_address];
+        unsigned char d = header.data[endian_fixed_address];
         fputc(d, images_file);
     }
 
     for (int i = 0; i < header.length * header.rows * header.cols; i++) {
-        char d = images[i];
+        unsigned char d = images[i];
         fputc(d, images_file);
     }
 
