@@ -12,7 +12,7 @@ if len(sys.argv) > 1:
 a = idx2numpy.convert_from_file("test.idx")
 onnx_result = idx2numpy.convert_from_file("result.idx")
 
-result = (((a[0] / 256) + (a[1] / 256)) * 256) % 256
+result = (((a[0] / 255) + (a[1] / 255)) * 255) % 256
 
 compare_distance = np.absolute(result - onnx_result)
 

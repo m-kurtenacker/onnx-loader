@@ -13,7 +13,6 @@ a = idx2numpy.convert_from_file("test.idx")
 print(a)
 onnx_result = idx2numpy.convert_from_file("result.idx")
 
-#result = (((a[0] / 256) + (a[1] / 256)) * 256) % 256
 intermediate = np.copy(a.reshape([1, 2, 3, 2]))
 intermediate[0, 1, 1, 1] = 42
 print(intermediate)

@@ -18,7 +18,7 @@ fn main() -> () {
         let reshape_1 = matrix_reshape_const_f32(manager, tensor_a, (3, reshape_1_size), reshape_1_size);
 
         print_tensor_256("reshape 1", reshape_1);
-        *reshape_1.access_fn([1 as i64, 1 as i64, 1 as i64]) = (42 as f32) / (256 as f32);
+        *reshape_1.access_fn([1 as i64, 1 as i64, 1 as i64]) = (42 as f32) / (255 as f32);
         print_tensor_256("reshape 1.5", reshape_1);
 
         let reshape_2_size = [3 as i64, 4 as i64];

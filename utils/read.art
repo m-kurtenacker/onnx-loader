@@ -121,7 +121,7 @@ fn read_idx(filename : &[u8]) -> &[Buffer] {
         let image = bitcast[&mut[f32]](items(i).data);
         
         for j in range(0, (sizes(1) * sizes(2)) as i32) {
-            image(j) = images(j + i * (sizes(1) * sizes(2)) as i32) as f32 / 256.0;
+            image(j) = images(j + i * (sizes(1) * sizes(2)) as i32) as f32 / 255.0;
         }
     }
 

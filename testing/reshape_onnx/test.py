@@ -22,9 +22,9 @@ with open("test.onnx", "rb") as f:
     model = load(f)
 
 sess = ReferenceEvaluator(model)
-a = np.array(a / 256, dtype=np.float32)
+a = np.array(a / 255, dtype=np.float32)
 feeds = {'A': a[0]}
-result = np.array([sess.run(None, feeds)[0] * 256], dtype=np.int32)
+result = np.array([sess.run(None, feeds)[0] * 255], dtype=np.int32)
 
 print(result)
 print(onnx_result)
