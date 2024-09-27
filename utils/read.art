@@ -152,7 +152,8 @@ fn write_idx(filename : &[u8], num_dims : i32, dims : &[i64], items : &[Buffer])
         let current_data = bitcast[&[f32]](current_item.data);
         
         for j in range(0, (dims(1) * dims(2)) as i32) {
-            images(j + i * (dims(1) * dims(2)) as i32) = (current_data(j) * 256.0) as u8;
+            //Yes, this double cast is necessary. Ask me how I know.
+            images(j + i * (dims(1) * dims(2)) as i32) = ((current_data(j) * 255.0) as i32) as u8;
         }
     }
 
