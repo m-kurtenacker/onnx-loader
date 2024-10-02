@@ -1,0 +1,31 @@
+#[intern] fn @run_network(_image : &[f32]) -> &[f32];
+
+#[export]
+fn main() -> () {
+    let data = read_idx("test.idx");
+
+    let tensor_input_buffer = data(0);
+    let tensor_input_d = bitcast[&mut[f32]](tensor_input_buffer.data);
+
+    let tensor_input = build_tensor_f32(tensor_input_buffer, 4, @|n : i32| { match n { 0 => 1, 1 => 1, 2 => 4, 3 => 3, _ => 0 }});
+    print_tensor_256("input", tensor_input);
+
+    let result_data = run_network(tensor_input_d);
+
+    let result_buffer = Buffer {
+        data = bitcast[&mut[i8]](result_data),
+        size = 0,
+        device = 0
+    };
+
+    let result_tensor = build_tensor_f32(result_buffer, 4, @|n : i32| { match n { 0 => 1, 1 => 2, 2 => 3, 3 => 2, _ => 0 }});
+    print_tensor_256("result", result_tensor);
+
+    let result_buffer_offset = Buffer {
+        data = bitcast[&mut[i8]](&result_data(3 * 2)),
+        size = 0,
+        device = 0
+    };
+
+    write_idx("result.idx", 3, [2, 3, 2], [result_buffer, result_buffer_offset]);
+}

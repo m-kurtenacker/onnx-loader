@@ -11,17 +11,27 @@ set(TARGET_NETWORK ${CMAKE_CURRENT_SOURCE_DIR}/mnist-example/mnist_cnn.onnx CACH
 set(TARGET_IMAGES ${CMAKE_CURRENT_SOURCE_DIR}/mnist-data/train-images-idx3-ubyte CACHE STRING "The target network to compile")
 set(TARGET_LABELS ${CMAKE_CURRENT_SOURCE_DIR}/mnist-data/train-labels-idx1-ubyte CACHE STRING "The target network to compile")
 
-configure_file(utils/config.h.in ${CMAKE_BINARY_DIR}/include/config.h @ONLY)
+configure_file(src/utils/config.h.in ${CMAKE_BINARY_DIR}/include/config.h @ONLY)
 include_directories(${CMAKE_BINARY_DIR}/include)
 
-file(GLOB MAT_OPS mat_ops/*.art)
+file(GLOB MAT_OPS src/mat_ops/*.art)
+
+set(SUPPORT_FILES
+    ${PROJECT_SOURCE_DIR}/plugin/plugin_interface.art
+    ${PROJECT_SOURCE_DIR}/src/utils/read.art
+    ${PROJECT_SOURCE_DIR}/src/utils/utils.art
+    ${PROJECT_SOURCE_DIR}/src/utils/loop.art
+    ${PROJECT_SOURCE_DIR}/src/sequential.art
+    ${PROJECT_SOURCE_DIR}/src/mat.art
+    ${MAT_OPS}
+)
 
 #Build the base program, run_network kept as an external refference to link against the compiled network.
 anydsl_runtime_fancy_wrap(MAIN_PROG_JSON
     FRONTEND "artic"
     NAME "main"
     EMIT_JSON
-    FILES main.art utils/read.art utils/utils.art sequential.art mat.art ${MAT_OPS}
+    FILES src/main.art ${SUPPORT_FILES}
 )
 
 anydsl_runtime_fancy_wrap(MAIN_PROG_JSON_COMPILED
@@ -39,13 +49,13 @@ anydsl_runtime_fancy_wrap(NET_TOOLS_JSON
     FRONTEND "artic"
     NAME "network_tools"
     EMIT_JSON
-    FILES sequential.art mat.art ${MAT_OPS}
+    FILES ${SUPPORT_FILES}
 )
 
 add_custom_command(
     OUTPUT network.thorin.json
-    COMMAND ${VENV}/bin/python ${CMAKE_CURRENT_SOURCE_DIR}/network.py ${TARGET_NETWORK}
-    DEPENDS network.py ${NET_TOOLS_JSON} ${VENV}
+    COMMAND ${VENV}/bin/python ${CMAKE_CURRENT_SOURCE_DIR}/lib/network.py ${TARGET_NETWORK}
+    DEPENDS lib/network.py ${NET_TOOLS_JSON} ${VENV}
 )
 
 anydsl_runtime_fancy_wrap(NETWORK_WITHTOOLS_JSON
@@ -77,7 +87,7 @@ target_link_libraries(load_plugin_TARGET PUBLIC onnx)
 add_library(loader_runtime SHARED plugin/load_runtime.cpp)
 target_link_libraries(loader_runtime PUBLIC onnx)
 
-add_executable(main ${MAIN_PROG_OBJ} utils/read.cpp utils/allocator.cpp)
+add_executable(main ${MAIN_PROG_OBJ} src/utils/read.cpp src/utils/allocator.cpp)
 target_link_libraries(main loader_runtime ${AnyDSL_runtime_LIBRARIES})
 
 if (BUILD_TESTING)

@@ -1,3 +1,11 @@
+fn @round_down(n: i32, d: i32) -> i32 {
+  (n / d) * d
+}
+
+fn @atomic_add (p: &mut f32, d : f32) {
+    atomic[f32](11, p, d, 7, "");
+}
+
 fn init_zero(arr: &mut[f32], width: i32, height: i32) -> () {
     for i in range(0, width*height) {
         arr(i) = 0;

@@ -113,6 +113,8 @@ with Thorin("network") as network:
 
     sequential = network.find_imported_def("sequential")
 
+    build_tensor_thorin = network.find_imported_def("build_tensor_f32")
+
     alloc_tensor_thorin = network.find_imported_def("alloc_tensor_f32")
     alloc_initializer_f32_thorin = network.find_imported_def("alloc_initializer_f32")
     alloc_initializer_i64_thorin = network.find_imported_def("alloc_initializer_i64")
@@ -153,6 +155,11 @@ with Thorin("network") as network:
         result_ptr = ThorinSlot(frame, data_type)
 
         with ThorinContinuation(body_type, filter=True) as (body_fn, body_mem, passmanager, body_return):
+            # Node format: { "result": <whatever this node produces>
+            #                "call": lambda in_cont, in_mem <used when the node is called from somewhere>
+            #                "cont": lambda out_cont, *out_param <used when the node is supposed to call something else>
+            #                "block": (cont, mem) <the last cont and memory of this node, used similar to "cont".
+            #}
             nodes = {}
 
             def translate_operation(onnx_node):
@@ -205,12 +212,11 @@ with Thorin("network") as network:
                     local_tensor_return_type = tensor_return_type
 
                 with ThorinContinuation(local_tensor_return_type) as (return_cont, return_mem, result_tensor):
-                    dimensions.reverse()
-
+                    #dimensions.reverse()
                     call_function = lambda in_cont, in_mem: in_cont(*alloc_and_load_tensor(in_mem, passmanager, return_cont, dimensions, onnx_node.name))
                     return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
-                    update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor), "onnx_node": onnx_node}
+                    update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
                     nodes.update({onnx_node.name : update_node})
                     return onnx_node.name
 
@@ -271,7 +277,7 @@ with Thorin("network") as network:
                         call_function = lambda in_cont, in_mem: in_cont(return_cont, in_mem, shape_tuple)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
-                        update_node = {"result": result_tuple, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tuple), "onnx_node": onnx_node}
+                        update_node = {"result": result_tuple, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
                         nodes.update({onnx_node.output[0] : update_node})
                         return onnx_node.output[0]
 
@@ -291,7 +297,7 @@ with Thorin("network") as network:
                         call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
-                        update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor), "onnx_node": onnx_node}
+                        update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
                         nodes.update({onnx_node.output[0] : update_node})
                         return onnx_node.output[0]
 
@@ -300,7 +306,7 @@ with Thorin("network") as network:
 
                     shape_global = convert_to_global_array(shape, i64_type)
                     stride_global = convert_to_global_array(strides, i64_type)
-                    padding_global = convert_to_global_array(padding[2:], i64_type)
+                    padding_global = convert_to_global_array(padding, i64_type)
                     output_shape_global = convert_to_global_array(output_shape, i64_type)
 
                     attributes = [output_shape_global, shape_global, stride_global, padding_global]
@@ -316,7 +322,7 @@ with Thorin("network") as network:
                         call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
-                        update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor), "onnx_node": onnx_node}
+                        update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
                         nodes.update({onnx_node.output[0] : update_node})
                         return onnx_node.output[0]
 
@@ -332,7 +338,7 @@ with Thorin("network") as network:
                         call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
                         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
-                        update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem, result_tensor), "onnx_node": onnx_node}
+                        update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
                         nodes.update({onnx_node.output[0] : update_node})
                         return onnx_node.output[0]
 
@@ -345,79 +351,28 @@ with Thorin("network") as network:
 
             image_dims = list(x.dim_value for x in graph.input[0].type.tensor_type.shape.dim)
 
-            local_copy = False
-            if local_copy:
-                alloc_block = ()
-                allocImage_continue, allocImage_mem, tensorImage = ThorinContinuation(tensor_3_return_type).__enter__()
+            num_image_dims = len(image_dims)
+            thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), image_dims))
+            sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
 
-                def rangeX_body(entry_block, mem, indexX, continueX_block):
-                    def rangeY_body(entry_block, mem, indexY, continueY_block):
-                        image_x_y_ptr = ThorinLEA([image, indexY * image_dims[0] + indexX])
+            #size_lambda = ...
+            with ThorinContinuation(tensor_type.formated_args[2][1], filter=True) as (size_lambda, size_mem, dimension, size_return):
+                r = ThorinExtract(sizes, dimension)
+                size_lambda(size_return, size_mem, r)
 
-                        #mem, frame = thorinEnterExtract(mem)
-                        addr_ptr = ThorinSlot(frame, ThorinDefiniteArrayType(i64_type, 3))
-                        addr_ptr_opaque = ThorinBitcast(addr_ptr, ThorinPointerType(ThorinIndefiniteArrayType(i64_type)))
+            image_buffer = ThorinStruct(buffer_type, [ThorinBitcast(image, iarrptr_type), ThorinConstant(i64_type, 0), ThorinConstant(i32_type, 0)])
 
-                        mem = mem << (addr_ptr, ThorinDefiniteArray(i64_type, [ThorinCast(indexX, i64_type), ThorinCast(indexY, i64_type), ThorinConstant(i64_type, 0)]))
+            buildImage_continue, buildImage_mem, tensorImage = ThorinContinuation(tensor_return_type).__enter__()
 
-                        image_access_fn = ThorinExtract(tensorImage, 3)
+            nodes[input_name] = {"result": tensorImage,
+                                 "call": lambda in_cont, in_mem: in_cont(build_tensor_thorin, in_mem, image_buffer, ThorinConstant(i32_type, num_image_dims), size_lambda, buildImage_continue),
+                                 "cont": lambda out_cont, *out_param: buildImage_continue(out_cont, buildImage_mem, *out_param),
+                                 "block": (buildImage_continue, buildImage_mem)}
 
-                        with ThorinContinuation(entry_block.type.args[2]) as (store_cont, store_mem, store_ptr):
-                            store_mem, value = store_mem >> image_x_y_ptr
-                            store_mem = store_mem << (store_ptr, value)
-
-                            store_cont(continueY_block, store_mem)
-
-                        entry_block(image_access_fn, mem, addr_ptr_opaque, store_cont)
-
-                    def rangeY_return(return_block, mem):
-                        return_block(continueX_block, mem)
-
-                    entry_block(*thorinRangeFn(mem, 0, image_dims[0], 1, rangeY_body, rangeY_return))
-
-                def rangeX_return(return_block, mem):
-                    global alloc_block
-                    alloc_block = (return_block, mem, tensorImage)
-
-                allocImage_continue(*thorinRangeFn(allocImage_mem, 0, image_dims[1], 1, rangeX_body, rangeX_return))
-
-                nodes[input_name] = {"result": tensorImage,
-                                     "call": lambda in_cont, in_mem: in_cont(*alloc_tensor(in_mem, passmanager, allocImage_continue, image_dims)),
-                                     "cont": lambda out_cont, *out_param: alloc_block[0](out_cont, alloc_block[1], *out_param),
-                                     "block": alloc_block}
-
-                ordered_nodes.append(input_name)
-            else:
-                num_image_dims = len(image_dims)
-                thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), image_dims))
-                sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
-
-                with ThorinContinuation(tensor_type.formated_args[2][1], filter=True) as (size_lambda, size_mem, dimension, size_return):
-                    r = ThorinExtract(sizes, dimension)
-                    size_lambda(size_return, size_mem, r)
-
-                with ThorinContinuation(tensor_type.formated_args[3][1], filter=True) as (access_lambda, access_mem, dimensions, access_return):
-                    x_ptr = ThorinLEA([dimensions, ThorinConstant(i64_type, 0)])
-                    access_mem, x = access_mem >> x_ptr
-
-                    y_ptr = ThorinLEA([dimensions, ThorinConstant(i64_type, 1)])
-                    access_mem, y = access_mem >> y_ptr
-
-                    #chan_ptr = ThorinExtract(dimensions, ThorinConstant(i64_type, 2))
-
-                    #image_chan_x_y_ptr = ThorinLEA([image, chan + ThorinConstant(i64_type, image_dims[2]) * (x + ThorinConstant(i64_type, image_dims[0]) * y)])
-                    #access_lambda(access_return, access_mem, image_chan_x_y_ptr)
-
-                    image_x_y_ptr = ThorinLEA([image, x * ThorinConstant(i64_type, image_dims[1]) + y])
-                    access_lambda(access_return, access_mem, image_x_y_ptr)
-
-                image_buffer = ThorinStruct(buffer_type, [ThorinBitcast(image, iarrptr_type), ThorinConstant(i64_type, 0), ThorinConstant(i32_type, 0)])
-                #tensorImage = ThorinStruct(tensor_type, [image_buffer, sizes, access_lambda])
-                tensorImage = ThorinStruct(tensor_type, [image_buffer, ThorinConstant(i32_type, num_image_dims), size_lambda, access_lambda])
-                nodes[input_name] = {"result": tensorImage}
+            ordered_nodes.append(input_name)
 
             #num_initializers = 0
-            num_initializers = len(graph.initializer)
+            num_initializers = len(graph.initializer) + 1 #?
 
             always_build_initializers = True
             if always_build_initializers:
@@ -431,10 +386,6 @@ with Thorin("network") as network:
 
                 for node, required in unordered_nodes:
                     my_required = list(required)
-
-                    if not local_copy:
-                        if input_name in my_required:
-                            my_required.remove(input_name)
 
                     for node_init in initializer_nodes:
                         if node_init in my_required:
@@ -519,7 +470,7 @@ with Thorin("network") as network:
             #    print(n)
 
             def link_nodes(entry, exit):
-                cont, mem, _ = entry["block"]
+                cont, mem = entry["block"]
                 exit["call"](cont, mem)
 
             for i in range(0, len(ordered_nodes) - 1):

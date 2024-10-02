@@ -1,0 +1,9 @@
+#[import(cc = "C", name = "load_matrix_dynamic")] fn load_matrix_dynamic[T](_tensor: &mut[T], _file_name: &[u8], _matrix_name: &[u8]) -> ();
+#[import(cc = "plugin", name = "static_alloca")] fn @(?size) static_alloca(size : i64) -> (fn() -> &mut [i8]);
+
+#[import(cc = "plugin", name = "static_release")] fn static_release(&mut [i8]) -> (fn() -> ());
+
+#[import (cc = "plugin", name = "build_dynamic_array")] fn @(?size) dynamic_array [T] (_element: T, size: i64) -> (fn() -> &mut [T]);
+
+#[import (cc = "plugin", name = "build_static_array")] fn @(?size) static_array [T] (_element: T, size: i64) -> &[T];
+#[import (cc = "plugin", name = "static_array_set_element", depends = static_array[T])] fn static_array_set_element [T] (_element: &T, _value: T) -> ();

@@ -2,8 +2,7 @@ anydsl_runtime_fancy_wrap(TEST_RESHAPE_JSON
     FRONTEND "artic"
     NAME "test"
     EMIT_JSON
-    FILES test.art ${PROJECT_SOURCE_DIR}/sequential.art ${PROJECT_SOURCE_DIR}/mat.art ${PROJECT_SOURCE_DIR}/utils/read.art ${MAT_OPS}
-    #FILES test.art ${PROJECT_SOURCE_DIR}/mat.art ${PROJECT_SOURCE_DIR}/sequential.art ${PROJECT_SOURCE_DIR}/utils/read.art ${PROJECT_SOURCE_DIR}/utils/utils.art
+    FILES test.art ${SUPPORT_FILES}
 )
 
 anydsl_runtime_fancy_wrap(TEST_REMOVE_INT
@@ -20,7 +19,7 @@ anydsl_runtime_fancy_wrap(TEST_RESHAPE_OBJ
     FILES ${TEST_REMOVE_INT}
 )
 
-add_executable(test_reshape ${TEST_RESHAPE_OBJ} ${PROJECT_SOURCE_DIR}/utils/read.cpp ${PROJECT_SOURCE_DIR}/utils/allocator.cpp)
+add_executable(test_reshape ${TEST_RESHAPE_OBJ} ${PROJECT_SOURCE_DIR}/src/utils/read.cpp ${PROJECT_SOURCE_DIR}/src/utils/allocator.cpp)
 target_link_libraries(test_reshape ${AnyDSL_runtime_LIBRARIES})
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/test.idx DESTINATION ${CMAKE_CURRENT_BINARY_DIR})

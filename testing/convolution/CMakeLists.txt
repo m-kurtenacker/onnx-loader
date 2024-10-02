@@ -18,7 +18,7 @@ add_custom_command(
     ${CMAKE_CURRENT_BINARY_DIR}/test.idx #No idea where else to put this.
 )
 
-anydsl_runtime_fancy_wrap(RESHAPE_NETWORK_WITHTOOLS_JSON
+anydsl_runtime_fancy_wrap(CONV_NETWORK_WITHTOOLS_JSON
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup_fix_point --keep-intern run_network
     EMIT_JSON
@@ -26,39 +26,39 @@ anydsl_runtime_fancy_wrap(RESHAPE_NETWORK_WITHTOOLS_JSON
     FILES ${CMAKE_CURRENT_BINARY_DIR}/network.thorin.json ${NET_TOOLS_JSON}
 )
 
-anydsl_runtime_fancy_wrap(RESHAPE_NETWORK_COMPILED_JSON
+anydsl_runtime_fancy_wrap(CONV_NETWORK_COMPILED_JSON
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup
     EMIT_JSON
     NAME "network_compiled"
     PLUGINS plugin/load_plugin.cpp
-    FILES ${RESHAPE_NETWORK_WITHTOOLS_JSON}
+    FILES ${CONV_NETWORK_WITHTOOLS_JSON}
 )
 
 
 # Build main + link everyting
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_MAIN_JSON
+anydsl_runtime_fancy_wrap(TEST_CONV_MAIN_JSON
     FRONTEND "artic"
     NAME "test"
     EMIT_JSON
     FILES test.art ${SUPPORT_FILES}
 )
 
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_MAIN_INT
+anydsl_runtime_fancy_wrap(TEST_CONV_MAIN_INT
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup --keep-intern run_network
     EMIT_JSON
     NAME "test-compiled"
-    FILES ${TEST_RESHAPE_MAIN_JSON}
+    FILES ${TEST_CONV_MAIN_JSON}
 )
 
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_ONNX_OBJ
+anydsl_runtime_fancy_wrap(TEST_CONV_ONNX_OBJ
     FRONTEND "anyopt"
     PLUGINS plugin/load_plugin.cpp
-    FILES ${TEST_RESHAPE_MAIN_INT} ${RESHAPE_NETWORK_COMPILED_JSON}
+    FILES ${TEST_CONV_MAIN_INT} ${CONV_NETWORK_COMPILED_JSON}
 )
 
-add_executable(test_reshape_onnx ${TEST_RESHAPE_ONNX_OBJ} ${PROJECT_SOURCE_DIR}/src/utils/read.cpp ${PROJECT_SOURCE_DIR}/src/utils/allocator.cpp)
-target_link_libraries(test_reshape_onnx loader_runtime ${AnyDSL_runtime_LIBRARIES})
+add_executable(test_conv_onnx ${TEST_CONV_ONNX_OBJ} ${PROJECT_SOURCE_DIR}/src/utils/read.cpp ${PROJECT_SOURCE_DIR}/src/utils/allocator.cpp)
+target_link_libraries(test_conv_onnx loader_runtime ${AnyDSL_runtime_LIBRARIES})
 
-add_test(NAME reshape_onnx COMMAND ${VENV}/bin/python ${CMAKE_CURRENT_SOURCE_DIR}/test.py ${CMAKE_CURRENT_BINARY_DIR} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+add_test(NAME conv_onnx COMMAND ${VENV}/bin/python ${CMAKE_CURRENT_SOURCE_DIR}/test.py ${CMAKE_CURRENT_BINARY_DIR} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})

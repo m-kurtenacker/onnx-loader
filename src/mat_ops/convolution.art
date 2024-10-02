@@ -1,0 +1,78 @@
+#[export] static mut time_conv : i64;
+
+#[intern]
+fn @matrix_convolution_padded (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], output_size: &[i64], kernel_shape: &[i64], stride: &[i64], padding: &[i64]) -> Tensor[f32] {
+    let start = get_micro_time();
+
+    /* input shape:  [ batch x in_chan x X x Y ]
+       weight shape: [ out_chan x in_chan x Xk x Yk ]
+       bias shape:   [ out_chan ]
+       output shape: [ batch x out_chan x Xo x Yo ]
+    */
+
+    print_array_i64("kernel_shape", kernel_shape, 2);
+    print_array_i64("stride", stride, 2);
+    print_array_i64("padding", padding, 4);
+    print_array_i64("output_size", output_size, 4);
+
+    print_tensor("Conv input", input);
+    print_tensor("Conv weight", weight);
+    print_tensor("Conv bias", bias);
+
+    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
+    let output = @alloc_tensor_layout[f32](manager, 4, output_size_fn, AllocLayout::KCR);
+
+    print_string("\n");
+
+    let num_out_chan = output_size(1) as i32;
+    let num_in_chan = weight.size_fn(1) as i32;
+
+    for x in range_step(0, output_size(2) as i32, stride(0) as i32) {
+        for y in range_step(0, output_size(3) as i32, stride(1) as i32) {
+
+            for out_chan in range(0, num_out_chan) {
+                let mut sum = 0 as f32;
+
+                for in_chan in range(0, num_in_chan) {
+
+                    for xk in range(0, kernel_shape(0) as i32) {
+                        for yk in range(0, kernel_shape(1) as i32) {
+
+                            let xi = x + xk - (padding(0) as i32);
+                            let yi = y + yk - (padding(1) as i32);
+
+                            let data = if (xi < 0) {
+                                0
+                            } else if (yi < 0) {
+                                0
+                            } else if (xi >= input.size_fn(2) as i32) {
+                                0
+                            } else if (yi >= input.size_fn(3) as i32) {
+                                0
+                            } else {
+                                *input.access_fn([0, in_chan as i64, xi as i64, yi as i64])
+                            };
+
+                            let weight = *weight.access_fn([out_chan as i64, in_chan as i64, xk as i64, yk as i64]);
+
+                            sum += data * weight;
+                        }
+                    }
+                }
+
+                //sum += *bias.access_fn([out_chan as i64]);
+                //sum = out_chan as f32 + x as f32 * 0.01 + y as f32 * 0.0001;
+
+                *output.access_fn([0 as i64, out_chan as i64, x as i64, y as i64]) = sum;
+            }
+        }
+    }
+
+    time_conv += get_micro_time() - start;
+
+    print_tensor("Conv", output);
+
+    print_string("\n");
+
+    output
+}
