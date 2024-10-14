@@ -82,33 +82,69 @@ void read_images(char * filename, char ** images) {
 size_t * read_idx(char * filename, char ** images) {
     FILE * images_file = fopen(filename, "r");
 
-    image_header header;
+    union {
+        char data[4];
+        int value;
+    } magic;
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 4; i++) {
         char d = fgetc(images_file);
         int endian_fixed_address = i - (i % 4) + (3 - i % 4);
-        header.data[endian_fixed_address] = d;
+        magic.data[endian_fixed_address] = d;
     }
 
-    printf("%d %d %d %d\n", header.magic, header.length, header.rows, header.cols);
+    int header_length = magic.data[0];
 
-    assert(header.magic == 2051);
-    //Currently only supported type: unsigned byte, 3 dimensions
+    union {
+        char data[4];
+        int value;
+    } dimension [header_length];
 
-    *images = (char*)malloc(sizeof(char) * header.length * header.rows * header.cols);
+    for (int i = 0; i < header_length; i++) {
+        for (int j = 0; j < 4; j++) {
+            char d = fgetc(images_file);
+            int endian_fixed_address = j - (j % 4) + (3 - j % 4);
+            dimension[i].data[endian_fixed_address] = d;
+        }
+    }
 
-    for (int i = 0; i < header.length * header.rows * header.cols; i++) {
-        char d = fgetc(images_file);
-        (*images)[i] = d;
+    int number_elements = 1;
+    for (int i = 0; i < header_length; i++) {
+        number_elements *= dimension[i].value;
+    }
+
+    printf("%d", magic.value);
+    for (int i = 0; i < header_length; i++) {
+        printf(" %d", dimension[i].value);
+    }
+    printf("\n");
+
+    if (magic.value >> 8 == 0x8) {
+        *images = (char*)malloc(sizeof(char) * number_elements);
+
+        for (int i = 0; i < sizeof(char) * number_elements; i++) {
+            char d = fgetc(images_file);
+            (*images)[i] = d;
+        }
+    } else if (magic.value >> 8 == 0xd) {
+        *images = (char*) malloc(sizeof(float) * number_elements);
+
+        for (int i = 0; i < sizeof(float) * number_elements; i++) {
+            char d = fgetc(images_file);
+            int endian_fixed_address = i - (i % 4) + (3 - i % 4);
+            (*images)[endian_fixed_address] = d;
+        }
+    } else {
+        assert(false && "Cannot import this type right now!");
     }
 
     fclose(images_file);
 
-    size_t * sizes = (size_t*) malloc(sizeof(size_t) * 4);
-    sizes[0] = header.length;
-    sizes[1] = header.rows;
-    sizes[2] = header.cols;
-    sizes[3] = 0;
+    size_t * sizes = (size_t*) malloc(sizeof(size_t) * (number_elements + 1));
+    for (int i = 0; i < number_elements; i++) {
+        sizes[i] = dimension[i].value;
+    }
+    sizes[number_elements] = 0;
 
     return sizes;
 }

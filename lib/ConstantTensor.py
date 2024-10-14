@@ -33,7 +33,8 @@ class ConstantTensor:
             module = tModule
 
         build_tensor_thorin = module.find_imported_def("build_tensor_f32") #fn(mem, Buffer, i32, fn(mem, i32, fn(mem, i64)), fn(mem, Tensor))
-        load_idx_thorin = module.find_imported_def("read_idx_int") #fn(mem, &[u8], fn(mem, Buffer))
+        load_idx_scaled_thorin = module.find_imported_def("read_idx_byte_scaled") #fn(mem, &[u8], fn(mem, Buffer))
+        load_idx_thorin = module.find_imported_def("read_idx_float") #fn(mem, &[u8], fn(mem, Buffer))
 
         mem_type = build_tensor_thorin.type.args[0]
         buffer_type = build_tensor_thorin.type.args[1]
@@ -54,7 +55,10 @@ class ConstantTensor:
             with ThorinContinuation(ThorinFnType([mem_type, buffer_type])) as (build_tensors, tensor_mem, input_buffer):
                 build_tensors(build_tensor_thorin, tensor_mem, input_buffer, num_dimensions, size_lambda, ret_function)
 
-            load_tensor(load_idx_thorin, load_tensor_mem, thorinString(self.filename("idx")), build_tensors)
+            if self.content.dtype == np.float32:
+                load_tensor(load_idx_thorin, load_tensor_mem, thorinString(self.filename("idx")), build_tensors)
+            else:
+                load_tensor(load_idx_scaled_thorin, load_tensor_mem, thorinString(self.filename("idx")), build_tensors)
 
         if tModule is None:
             module.__exit__(0, 0, 0)
