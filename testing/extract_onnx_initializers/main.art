@@ -1,0 +1,21 @@
+#[intern] fn load_weight_1() -> Tensor[f32];
+#[intern] fn load_weight_2() -> Tensor[f32];
+#[intern] fn load_bias_1() -> Tensor[f32];
+#[intern] fn load_bias_2() -> Tensor[f32];
+
+#[export]
+fn main() -> i32 {
+    let weight_1 = load_weight_1();
+    let weight_2 = load_weight_2();
+    let bias_1 = load_bias_1();
+    let bias_2 = load_bias_2();
+
+    print_tensor_256("weight 1", weight_1);
+    print_tensor_256("weight 2", weight_2);
+    print_tensor_256("bias 1", bias_1);
+    print_tensor_256("bias 2", bias_2);
+
+    //if ((*test.access_fn([0, 0, 0]) * 255.0) as i32) != 1 { return(1) }
+
+    return(0)
+}
