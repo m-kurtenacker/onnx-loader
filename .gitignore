@@ -1,2 +1,3 @@
 /build/
 /mnist-data/*-ubyte
+__pycache__
