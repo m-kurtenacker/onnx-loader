@@ -52,10 +52,19 @@ anydsl_runtime_fancy_wrap(TEST_CONV_MAIN_INT
     FILES ${TEST_CONV_MAIN_JSON}
 )
 
-anydsl_runtime_fancy_wrap(TEST_CONV_ONNX_OBJ
+#TODO: See openproject bug#631 for why this step is needed.
+anydsl_runtime_fancy_wrap(TEST_CONV_ONNX_COMBINED
     FRONTEND "anyopt"
+    ANYOPT_FLAGS --pass cleanup --remove-interns
+    EMIT_JSON
+    NAME "test-combined"
     PLUGINS plugin/load_plugin.cpp
     FILES ${TEST_CONV_MAIN_INT} ${CONV_NETWORK_COMPILED_JSON}
+)
+
+anydsl_runtime_fancy_wrap(TEST_CONV_ONNX_OBJ
+    FRONTEND "anyopt"
+    FILES ${TEST_CONV_ONNX_COMBINED}
 )
 
 add_executable(test_conv_onnx ${TEST_CONV_ONNX_OBJ} ${PROJECT_SOURCE_DIR}/src/utils/read.cpp ${PROJECT_SOURCE_DIR}/src/utils/allocator.cpp)

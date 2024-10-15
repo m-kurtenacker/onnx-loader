@@ -1,30 +1,24 @@
-#[intern] fn @run_network(_image : &[f32]) -> &[f32];
+#[intern] fn @run_network(_manager : PassManager, _input_tensor : Tensor[f32]) -> Tensor[f32];
 
 #[export]
 fn main() -> () {
     let data = read_idx("test.idx");
 
     let tensor_a_buffer = data(0);
-    let tensor_a = bitcast[&mut[f32]](tensor_a_buffer.data);
 
-    let tensor_a_t = Tensor[f32] {
-        buffer = tensor_a_buffer,
-        num_dims = 2,
-        size_fn = @|n : i32| { if n == 0 { 4 } else { 3 } },
-        access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_a_buffer.data)(a(0) * 3 + a(1))) }
-    };
+    let mut result_buffer : Buffer;
 
-    print_tensor_256("Test a", tensor_a_t);
+    for manager in sequential() {
+        let tensor_a_t = build_tensor_f32(tensor_a_buffer, 2, @|n : i32| { match n { 0 => 4, 1 => 3, _ => 0 }});
 
-    print_string("Exec network\n");
+        print_tensor_256("Test a", tensor_a_t);
 
-    let result_data = run_network(tensor_a);
+        let result_tensor = run_network(manager, tensor_a_t);
 
-    let result_buffer = Buffer {
-        data = bitcast[&mut[i8]](result_data),
-        size = 0,
-        device = 0
-    };
+        print_tensor_256("result", result_tensor);
+
+        result_buffer = result_tensor.buffer;
+    }
 
     write_idx("result.idx", 3, [1, 3, 4], [result_buffer]);
 }

@@ -1,12 +1,7 @@
 #[export] static mut time_add : i64;
 
-#[intern]
-fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
+fn @matrix_add_intern (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32], output: Tensor[f32], output_size: &[i64]) -> () {
     let start = get_micro_time();
-
-    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
-
-    let output = @alloc_tensor[f32](manager, matA.num_dims, output_size_fn);
 
     for instance in multi_loop (manager, matA.num_dims, output_size) {
         let A = *matA.access_fn(instance.index);
@@ -16,6 +11,15 @@ fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32], outp
     }
 
     time_add += get_micro_time() - start;
+}
+
+#[intern]
+fn @matrix_add (manager: PassManager, matA: Tensor[f32], matB: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
+    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
+
+    let output = @alloc_tensor[f32](manager, matA.num_dims, output_size_fn);
+
+    matrix_add_intern (manager, matA, matB, output, output_size);
 
     print_tensor("Addition", output);
 
