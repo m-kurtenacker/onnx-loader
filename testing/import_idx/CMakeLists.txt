@@ -5,14 +5,14 @@ add_custom_command(
 )
 
 # Build main + link everyting
-anydsl_runtime_fancy_wrap(TEST_LOAD_IDX_MAIN_JSON
+anydsl_runtime_wrap(TEST_LOAD_IDX_MAIN_JSON
     FRONTEND "artic"
     NAME "main"
     EMIT_JSON
     FILES main.art ${SUPPORT_FILES}
 )
 
-anydsl_runtime_fancy_wrap(TEST_LOAD_IDX_COMBINED_JSON
+anydsl_runtime_wrap(TEST_LOAD_IDX_COMBINED_JSON
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup_fix_point --remove-interns
     NAME "combined"
@@ -20,7 +20,7 @@ anydsl_runtime_fancy_wrap(TEST_LOAD_IDX_COMBINED_JSON
     FILES ${TEST_LOAD_IDX_MAIN_JSON} ${CMAKE_CURRENT_BINARY_DIR}/load_test.thorin.json
 )
 
-anydsl_runtime_fancy_wrap(TEST_LOAD_IDX_OBJ
+anydsl_runtime_wrap(TEST_LOAD_IDX_OBJ
     FRONTEND "anyopt"
     PLUGINS plugin/load_plugin.cpp
     FILES ${TEST_LOAD_IDX_COMBINED_JSON}

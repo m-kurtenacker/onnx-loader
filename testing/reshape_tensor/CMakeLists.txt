@@ -1,11 +1,11 @@
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_TENSOR_JSON
+anydsl_runtime_wrap(TEST_RESHAPE_TENSOR_JSON
     FRONTEND "artic"
     NAME "test"
     EMIT_JSON
     FILES test.art ${SUPPORT_FILES}
 )
 
-anydsl_runtime_fancy_wrap(TEST_REMOVE_INT_TENSOR
+anydsl_runtime_wrap(TEST_REMOVE_INT_TENSOR
     FRONTEND "anyopt"
     ANYOPT_FLAGS "--remove-interns"
     EMIT_JSON
@@ -13,7 +13,7 @@ anydsl_runtime_fancy_wrap(TEST_REMOVE_INT_TENSOR
     FILES ${TEST_RESHAPE_TENSOR_JSON}
 )
 
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_TENSOR_OBJ
+anydsl_runtime_wrap(TEST_RESHAPE_TENSOR_OBJ
     FRONTEND "anyopt"
     PLUGINS plugin/load_plugin.cpp
     FILES ${TEST_REMOVE_INT_TENSOR}

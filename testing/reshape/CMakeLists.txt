@@ -1,11 +1,11 @@
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_JSON
+anydsl_runtime_wrap(TEST_RESHAPE_JSON
     FRONTEND "artic"
     NAME "test"
     EMIT_JSON
     FILES test.art ${SUPPORT_FILES}
 )
 
-anydsl_runtime_fancy_wrap(TEST_REMOVE_INT
+anydsl_runtime_wrap(TEST_REMOVE_INT
     FRONTEND "anyopt"
     ANYOPT_FLAGS "--remove-interns"
     EMIT_JSON
@@ -13,7 +13,7 @@ anydsl_runtime_fancy_wrap(TEST_REMOVE_INT
     FILES ${TEST_RESHAPE_JSON}
 )
 
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_OBJ
+anydsl_runtime_wrap(TEST_RESHAPE_OBJ
     FRONTEND "anyopt"
     PLUGINS plugin/load_plugin.cpp
     FILES ${TEST_REMOVE_INT}

@@ -18,7 +18,7 @@ add_custom_command(
     ${CMAKE_CURRENT_BINARY_DIR}/test.idx #No idea where else to put this.
 )
 
-anydsl_runtime_fancy_wrap(CONV_NETWORK_WITHTOOLS_JSON
+anydsl_runtime_wrap(CONV_NETWORK_WITHTOOLS_JSON
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup_fix_point --keep-intern run_network
     EMIT_JSON
@@ -26,7 +26,7 @@ anydsl_runtime_fancy_wrap(CONV_NETWORK_WITHTOOLS_JSON
     FILES ${CMAKE_CURRENT_BINARY_DIR}/network.thorin.json ${NET_TOOLS_JSON}
 )
 
-anydsl_runtime_fancy_wrap(CONV_NETWORK_COMPILED_JSON
+anydsl_runtime_wrap(CONV_NETWORK_COMPILED_JSON
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup
     EMIT_JSON
@@ -37,14 +37,14 @@ anydsl_runtime_fancy_wrap(CONV_NETWORK_COMPILED_JSON
 
 
 # Build main + link everyting
-anydsl_runtime_fancy_wrap(TEST_CONV_MAIN_JSON
+anydsl_runtime_wrap(TEST_CONV_MAIN_JSON
     FRONTEND "artic"
     NAME "test"
     EMIT_JSON
     FILES test.art ${SUPPORT_FILES}
 )
 
-anydsl_runtime_fancy_wrap(TEST_CONV_MAIN_INT
+anydsl_runtime_wrap(TEST_CONV_MAIN_INT
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup --keep-intern run_network
     EMIT_JSON
@@ -53,7 +53,7 @@ anydsl_runtime_fancy_wrap(TEST_CONV_MAIN_INT
 )
 
 #TODO: See openproject bug#631 for why this step is needed.
-anydsl_runtime_fancy_wrap(TEST_CONV_ONNX_COMBINED
+anydsl_runtime_wrap(TEST_CONV_ONNX_COMBINED
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup --remove-interns
     EMIT_JSON
@@ -62,7 +62,7 @@ anydsl_runtime_fancy_wrap(TEST_CONV_ONNX_COMBINED
     FILES ${TEST_CONV_MAIN_INT} ${CONV_NETWORK_COMPILED_JSON}
 )
 
-anydsl_runtime_fancy_wrap(TEST_CONV_ONNX_OBJ
+anydsl_runtime_wrap(TEST_CONV_ONNX_OBJ
     FRONTEND "anyopt"
     FILES ${TEST_CONV_ONNX_COMBINED}
 )

@@ -18,7 +18,7 @@ add_custom_command(
     ${CMAKE_CURRENT_BINARY_DIR}/test.idx #No idea where else to put this.
 )
 
-anydsl_runtime_fancy_wrap(RESHAPE_NETWORK_WITHTOOLS_JSON
+anydsl_runtime_wrap(RESHAPE_NETWORK_WITHTOOLS_JSON
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup_fix_point --keep-intern run_network
     EMIT_JSON
@@ -26,7 +26,7 @@ anydsl_runtime_fancy_wrap(RESHAPE_NETWORK_WITHTOOLS_JSON
     FILES ${CMAKE_CURRENT_BINARY_DIR}/network.thorin.json ${NET_TOOLS_JSON}
 )
 
-anydsl_runtime_fancy_wrap(RESHAPE_NETWORK_COMPILED_JSON
+anydsl_runtime_wrap(RESHAPE_NETWORK_COMPILED_JSON
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup
     EMIT_JSON
@@ -37,14 +37,14 @@ anydsl_runtime_fancy_wrap(RESHAPE_NETWORK_COMPILED_JSON
 
 
 # Build main + link everyting
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_MAIN_JSON
+anydsl_runtime_wrap(TEST_RESHAPE_MAIN_JSON
     FRONTEND "artic"
     NAME "test"
     EMIT_JSON
     FILES test.art ${SUPPORT_FILES}
 )
 
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_MAIN_INT
+anydsl_runtime_wrap(TEST_RESHAPE_MAIN_INT
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup --keep-intern run_network
     EMIT_JSON
@@ -52,7 +52,7 @@ anydsl_runtime_fancy_wrap(TEST_RESHAPE_MAIN_INT
     FILES ${TEST_RESHAPE_MAIN_JSON}
 )
 
-anydsl_runtime_fancy_wrap(TEST_RESHAPE_ONNX_OBJ
+anydsl_runtime_wrap(TEST_RESHAPE_ONNX_OBJ
     FRONTEND "anyopt"
     PLUGINS plugin/load_plugin.cpp
     FILES ${TEST_RESHAPE_MAIN_INT} ${RESHAPE_NETWORK_COMPILED_JSON}

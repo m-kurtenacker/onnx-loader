@@ -10,14 +10,14 @@ add_custom_command(
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/network.py ${NET_TOOLS_JSON} ${VENV} ${CMAKE_CURRENT_BINARY_DIR}/test.onnx
 )
 
-anydsl_runtime_fancy_wrap(TEST_EXPORT_IDX_MAIN_JSON
+anydsl_runtime_wrap(TEST_EXPORT_IDX_MAIN_JSON
     FRONTEND "artic"
     NAME "main"
     EMIT_JSON
     FILES main.art ${SUPPORT_FILES}
 )
 
-anydsl_runtime_fancy_wrap(TEST_EXPORT_IDX_COMBINED_JSON
+anydsl_runtime_wrap(TEST_EXPORT_IDX_COMBINED_JSON
     FRONTEND "anyopt"
     ANYOPT_FLAGS --pass cleanup_fix_point --remove-interns
     NAME "combined"
@@ -25,7 +25,7 @@ anydsl_runtime_fancy_wrap(TEST_EXPORT_IDX_COMBINED_JSON
     FILES ${TEST_EXPORT_IDX_MAIN_JSON} ${CMAKE_CURRENT_BINARY_DIR}/loader.thorin.json
 )
 
-anydsl_runtime_fancy_wrap(TEST_EXPORT_IDX_OBJ
+anydsl_runtime_wrap(TEST_EXPORT_IDX_OBJ
     FRONTEND "anyopt"
     PLUGINS plugin/load_plugin.cpp
     FILES ${TEST_EXPORT_IDX_COMBINED_JSON}
