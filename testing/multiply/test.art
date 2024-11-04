@@ -1,0 +1,11 @@
+#[intern] fn @load_t() -> Tensor[f32];
+#[intern] fn @load_M() -> Tensor[f32];
+
+#[export]
+fn main() -> () {
+    let tensor_t = load_t();
+    let tensor_M = load_M();
+
+    print_tensor_256("M", tensor_M);
+    print_tensor_256("t", tensor_t);
+}
