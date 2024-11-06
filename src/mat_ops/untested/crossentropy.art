@@ -1,23 +1,23 @@
 fn @matrix_sparsecrossentropy (manager: PassManager, mat: Tensor[f32], expected: i32) -> f32 {
-    let index_buffer_buffer = manager.alloc(sizeof[i64]() * 1 as i64);
+    let index_buffer_buffer = get_buffer_managed(sizeof[i64]() * 1 as i64);
     let index_buffer = bitcast[&mut[i64]](index_buffer_buffer.data);
 
     index_buffer(0) = expected as i64;
 
     let r = - math_builtins::log(*mat.access_fn(index_buffer));
 
-    manager.release(index_buffer_buffer);
+    release_buffer_managed(index_buffer_buffer);
 
     r
 }
 
 #[intern]
-fn @matrix_sparsecrossentropy_f32 (manager: PassManager, mat: Tensor[f32], expected: i32) = @matrix_sparsecrossentropy(manager, mat, expected);
+fn @matrix_sparsecrossentropy_f32 (_manager: PassManager, mat: Tensor[f32], expected: i32) = @matrix_sparsecrossentropy(mat, expected);
 
 fn @matrix_crossentropy (manager: PassManager, mat: Tensor[f32], expected: i32) -> f32 {
     let mut sum = 0 as f32;
 
-    let dims_buffer = manager.alloc(sizeof[i64]() * mat.num_dims as i64);
+    let dims_buffer = get_buffer_managed(sizeof[i64]() * mat.num_dims as i64);
     let dims = bitcast[&mut [i64]](dims_buffer.data);
     for index in range(0, mat.num_dims) {
         dims(index) = mat.size_fn(index);

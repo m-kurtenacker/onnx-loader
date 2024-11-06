@@ -5,7 +5,7 @@ fn @matrix_max_pool (manager: PassManager, input: Tensor[f32], output_size: &[i6
     let start = get_micro_time();
 
     fn @output_size_fn(n : i32) -> i64 { output_size(n) }
-    let output = @alloc_tensor_layout[f32](manager, 3, output_size_fn, AllocLayout::RCK);
+    let output = @alloc_tensor[f32](3, output_size_fn);
 
     for inst_out in multi_loop(manager, 3, output_size) {
         let mut input_dims : [i64 * 3];

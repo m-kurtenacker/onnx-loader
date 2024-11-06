@@ -34,9 +34,6 @@ i32_type = ThorinPrimType("qs32")
 i64_type = ThorinPrimType("qs64")
 i8_type = ThorinPrimType("qs8")
 
-f32_ptr_type = ThorinPointerType(f32_type)
-iarrptr_type = ThorinPointerType(ThorinIndefiniteArrayType(i8_type))
-f32_array_type = ThorinPointerType(ThorinIndefiniteArrayType(f32_type))
 i64_arr_type = ThorinPointerType(ThorinIndefiniteArrayType(i64_type))
 
 return_type = ThorinFnType([mem_type])
@@ -45,20 +42,7 @@ exec_type = ThorinFnType([mem_type], ThorinFnType([mem_type]))
 thorin_constant_producer_type = ThorinFnType([mem_type, ThorinTupleType([i32_type, i64_arr_type])])
 
 
-def alloc_tensor(entry_mem, passmanager, finish_cont, dimensions):
-    #print("Alloc tensor with", dimensions)
-
-    thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), dimensions))
-    sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
-
-    with ThorinContinuation(tensor_type.formated_args[2][1], filter=True) as (size_lambda, size_mem, dimension, size_return):
-        r = ThorinExtract(sizes, dimension)
-        size_lambda(size_return, size_mem, r)
-
-    return (alloc_tensor_thorin, entry_mem, passmanager, ThorinConstant(i32_type, len(thorin_dimensions)), size_lambda, finish_cont)
-
-
-def alloc_initializer(entry_mem, passmanager, finish_cont, dimensions):
+def alloc_initializer(entry_mem, finish_cont, dimensions):
     #print("Alloc initializer with", dimensions)
     thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), dimensions))
     sizes = ThorinDefiniteArray(i64_type, thorin_dimensions)
@@ -74,10 +58,10 @@ def alloc_initializer(entry_mem, passmanager, finish_cont, dimensions):
     else:
         alloc_function = alloc_initializer_f32_thorin
 
-    return (alloc_function, entry_mem, passmanager, ThorinConstant(i32_type, len(dimensions)), size_lambda, finish_cont)
+    return (alloc_function, entry_mem, ThorinConstant(i32_type, len(dimensions)), size_lambda, finish_cont)
 
 
-def alloc_and_load_tensor(entry_mem, passmanager, finish_cont, dimensions, matrix_name):
+def alloc_and_load_tensor(entry_mem, finish_cont, dimensions, matrix_name):
     model_name = thorinString(ONNX_MODEL)
     matrix_name = thorinString(matrix_name)
 
@@ -97,11 +81,11 @@ def alloc_and_load_tensor(entry_mem, passmanager, finish_cont, dimensions, matri
 
         alloc_continue(load_matrix_into, alloc_mem, tensor, model_name, matrix_name, load_return)
 
-    return alloc_initializer(entry_mem, passmanager, alloc_continue, dimensions)
-    #return alloc_initializer(entry_mem, passmanager, finish_cont, dimensions) #Do not load stuf, only allocation.
+    return alloc_initializer(entry_mem, alloc_continue, dimensions)
+    #return alloc_initializer(entry_mem, finish_cont, dimensions) #Do not load stuf, only allocation.
 
 
-def load_initializer(onnx_node, passmanager):
+def load_initializer(onnx_node):
     dimensions = onnx_node.dims
     data_type = onnx_node.data_type
 
@@ -112,7 +96,7 @@ def load_initializer(onnx_node, passmanager):
 
     with ThorinContinuation(local_tensor_return_type) as (return_cont, return_mem, result_tensor):
         #dimensions.reverse()
-        call_function = lambda in_cont, in_mem: in_cont(*alloc_and_load_tensor(in_mem, passmanager, return_cont, dimensions, onnx_node.name))
+        call_function = lambda in_cont, in_mem: in_cont(*alloc_and_load_tensor(in_mem, return_cont, dimensions, onnx_node.name))
         return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
         update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
@@ -168,7 +152,7 @@ def translate_operation(onnx_node):
         assert(False)
 
 
-def build_node(onnx_node, passmanager):
+def build_node(onnx_node):
     #Gather the output shape for all nodes.
     output_shape = []
     if onnx_node.output[0] == output_name:
@@ -241,7 +225,7 @@ def build_node(onnx_node, passmanager):
         return_fn_type = thorin_operation.type.args[-1]
 
         with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
-            call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
+            call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
             return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
             update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
@@ -262,7 +246,7 @@ def build_node(onnx_node, passmanager):
         return_fn_type = thorin_operation.type.args[-1]
 
         with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
-            call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
+            call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
             return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
             update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
@@ -278,7 +262,7 @@ def build_node(onnx_node, passmanager):
         attributes = [output_shape_global]
 
         with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
-            call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, passmanager, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
+            call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
             return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
 
             update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
@@ -290,32 +274,29 @@ with Thorin("network") as network:
     network.include(NETWORK_TOOLS_PATH)
 
     build_tensor_thorin = network.find_imported_def("build_tensor_f32")
-
     alloc_tensor_thorin = network.find_imported_def("alloc_tensor_f32")
     alloc_initializer_f32_thorin = network.find_imported_def("alloc_initializer_f32")
     alloc_initializer_i64_thorin = network.find_imported_def("alloc_initializer_i64")
     load_matrix_into_f32 = network.find_imported_def("load_matrix_into_f32")
     load_matrix_into_i64 = network.find_imported_def("load_matrix_into_i64")
 
-    mat_flatten = network.find_imported_def("matrix_flatten_f32")
-    #mat_mul = network.find_imported_def("matrix_multiply")
+    mat_mul = network.find_imported_def("matrix_multiply")
     mat_add = network.find_imported_def("matrix_add")
-    mat_relu = network.find_imported_def("matrix_relu")
-    #mat_lrn = network.find_imported_def("matrix_lrn_f32")
-    mat_gemm = network.find_imported_def("matrix_gemm_f32")
-    #mat_softmax = network.find_imported_def("matrix_softmax")
-    mat_log_softmax = network.find_imported_def("matrix_log_softmax")
     mat_reshape = network.find_imported_def("matrix_reshape_f32")
     mat_reshape_const = network.find_imported_def("matrix_reshape_const_f32")
     mat_conv = network.find_imported_def("matrix_convolution_padded")
-    mat_max_pool = network.find_imported_def("matrix_max_pool")
-    mat_transpose = network.find_imported_def("matrix_transpose_f32")
+
+    #mat_flatten = network.find_imported_def("matrix_flatten_f32")
+    #mat_relu = network.find_imported_def("matrix_relu")
+    #mat_lrn = network.find_imported_def("matrix_lrn_f32")
+    #mat_gemm = network.find_imported_def("matrix_gemm_f32")
+    #mat_softmax = network.find_imported_def("matrix_softmax")
+    #mat_log_softmax = network.find_imported_def("matrix_log_softmax")
+    #mat_max_pool = network.find_imported_def("matrix_max_pool")
+    #mat_transpose = network.find_imported_def("matrix_transpose_f32")
     #mat_avg_pool = network.find_imported_def("matrix_avg_pool")
     #mat_dropout = network.find_imported_def("matrix_dropout_f32")
-
     #mat_concat = network.find_imported_def("matrix_concat4_f32")
-
-    passmanager_type = mat_flatten.type.args[1]
 
     tensor_return_type = alloc_initializer_f32_thorin.type.args[-1]
     tensor_type = tensor_return_type.args[1]
@@ -323,9 +304,9 @@ with Thorin("network") as network:
     tensor_i64_return_type = alloc_initializer_i64_thorin.type.args[-1]
     tensor_i64_type = tensor_i64_return_type.args[1]
 
-    network_exec_type = ThorinFnType([mem_type, passmanager_type, tensor_type], tensor_type)
+    network_exec_type = ThorinFnType([mem_type, tensor_type], tensor_type)
 
-    with ThorinContinuation(network_exec_type, internal="run_network", thorin=network) as (run_network, run_network_mem, run_passmanager, run_image, ret_function):
+    with ThorinContinuation(network_exec_type, internal="run_network", thorin=network) as (run_network, run_network_mem, run_image, ret_function):
         # Node format: { "result": <whatever this node produces>
         #                "call": lambda in_cont, in_mem <used when the node is called from somewhere>
         #                "cont": lambda out_cont, *out_param <used when the node is supposed to call something else>
@@ -350,10 +331,10 @@ with Thorin("network") as network:
         ordered_nodes.append(input_name)
 
         for initializer in graph.initializer:
-            ordered_nodes.append(load_initializer(initializer, run_passmanager))
+            ordered_nodes.append(load_initializer(initializer))
 
         for node in graph.node:
-            ordered_nodes.append(build_node(node, run_passmanager))
+            ordered_nodes.append(build_node(node))
 
         def link_nodes(entry, exit):
             cont, mem = entry["block"]

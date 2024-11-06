@@ -4,7 +4,7 @@ fn @matrix_lrn (manager: PassManager, mat: Tensor[f32], output_size: &[i64]) -> 
     let start = get_micro_time();
 
     fn @output_size_fn(n : i32) -> i64 { output_size(n) }
-    let output = @alloc_tensor_layout[f32](manager, 3, output_size_fn, AllocLayout::RCK);
+    let output = @alloc_tensor[f32](3, output_size_fn);
 
     let num_chan = mat.size_fn(2) as i32;
 

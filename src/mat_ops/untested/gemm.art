@@ -1,5 +1,5 @@
 #[intern]
-fn @matrix_gemm_f32 (manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
+fn @matrix_gemm_f32 (_manager: PassManager, input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
     let mult_result = @matrix_multiply(manager, input, weight, output_size);
 
     let output = @matrix_add(manager, mult_result, bias, output_size);

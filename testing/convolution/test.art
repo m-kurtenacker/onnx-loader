@@ -1,4 +1,4 @@
-#[intern] fn @run_network(_manager : PassManager, _input_tensor : Tensor[f32]) -> Tensor[f32];
+#[intern] fn @run_network(_input_tensor : Tensor[f32]) -> Tensor[f32];
 
 #[export]
 fn main() -> () {
@@ -8,16 +8,14 @@ fn main() -> () {
 
     let mut result_buffer : Buffer;
 
-    for manager in sequential() {
-        let tensor_input = build_tensor_f32(tensor_input_buffer, 4, @|n : i32| { match n { 0 => 1, 1 => 1, 2 => 4, 3 => 3, _ => 0 }});
-        print_tensor_256("input", tensor_input);
+    let tensor_input = build_tensor_f32(tensor_input_buffer, 4, @|n : i32| { match n { 0 => 1, 1 => 1, 2 => 4, 3 => 3, _ => 0 }});
+    print_tensor_256("input", tensor_input);
 
-        let result_tensor = run_network(manager, tensor_input);
+    let result_tensor = run_network(tensor_input);
 
-        print_tensor_256("result", result_tensor);
+    print_tensor_256("result", result_tensor);
 
-        result_buffer = result_tensor.buffer;
-    }
+    result_buffer = result_tensor.buffer;
 
     let result_data = bitcast[&[f32]](result_buffer.data);
 

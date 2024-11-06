@@ -1,4 +1,4 @@
-fn @matrix_concat4[T] (_manager: PassManager, mat1: Tensor[T], mat2: Tensor[T], mat3: Tensor[T], mat4: Tensor[T], output_size: &[i64]) -> Tensor[T] {
+fn @matrix_concat4[T] (mat1: Tensor[T], mat2: Tensor[T], mat3: Tensor[T], mat4: Tensor[T], output_size: &[i64]) -> Tensor[T] {
     fn @output_size_fn(n : i32) -> i64 { output_size(n) }
 
     let new_access_fn = |n : &[i64]| {
@@ -39,9 +39,9 @@ fn @matrix_concat4[T] (_manager: PassManager, mat1: Tensor[T], mat2: Tensor[T], 
 }
 
 #[intern]
-fn @matrix_concat4_f32 (manager: PassManager, mat1: Tensor[f32], mat2: Tensor[f32], mat3: Tensor[f32], mat4: Tensor[f32], output_size: &[i64]) = @matrix_concat4[f32] (manager, mat1, mat2, mat3, mat4, output_size);
+fn @matrix_concat4_f32 (_manager: PassManager, mat1: Tensor[f32], mat2: Tensor[f32], mat3: Tensor[f32], mat4: Tensor[f32], output_size: &[i64]) = @matrix_concat4[f32] (mat1, mat2, mat3, mat4, output_size);
 
-fn @matrix_concat2[T] (_manager: PassManager, mat1: Tensor[T], mat2: Tensor[T], output_size: &[i64]) -> Tensor[T] {
+fn @matrix_concat2[T] (mat1: Tensor[T], mat2: Tensor[T], output_size: &[i64]) -> Tensor[T] {
     fn @output_size_fn(n : i32) -> i64 { output_size(n) }
 
     let new_access_fn = |n : &[i64]| {
@@ -70,4 +70,4 @@ fn @matrix_concat2[T] (_manager: PassManager, mat1: Tensor[T], mat2: Tensor[T], 
 }
 
 #[intern]
-fn @matrix_concat2_f32 (manager: PassManager, mat1: Tensor[f32], mat2: Tensor[f32], output_size: &[i64]) = @matrix_concat2[f32] (manager, mat1, mat2, output_size);
+fn @matrix_concat2_f32 (_manager: PassManager, mat1: Tensor[f32], mat2: Tensor[f32], output_size: &[i64]) = @matrix_concat2[f32] (mat1, mat2, output_size);

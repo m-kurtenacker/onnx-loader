@@ -2,33 +2,30 @@
 fn main() -> () {
     let data = read_idx("test.idx");
 
-    for manager in sequential() {
-        let tensor_a_buffer = data(0);
-        let tensor_b_buffer = data(1);
+    let tensor_a_buffer = data(0);
+    let tensor_b_buffer = data(1);
 
-        let tensor_a = Tensor[f32] {
-            buffer = tensor_a_buffer,
-            num_dims = 2,
-            size_fn = @|n : i32| { if n == 0 { 3 } else { 4 } },
-            access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_a_buffer.data)(a(0) * 4 + a(1))) }
-        };
+    let tensor_a = Tensor[f32] {
+        buffer = tensor_a_buffer,
+        num_dims = 2,
+        size_fn = @|n : i32| { if n == 0 { 3 } else { 4 } },
+        access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_a_buffer.data)(a(0) * 4 + a(1))) }
+    };
 
-        let tensor_b = Tensor[f32] {
-            buffer = tensor_b_buffer,
-            num_dims = 2,
-            size_fn = @|n : i32| { if n == 0 { 3 } else { 4 } },
-            access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_b_buffer.data)(a(0) * 4 + a(1))) }
-        };
+    let tensor_b = Tensor[f32] {
+        buffer = tensor_b_buffer,
+        num_dims = 2,
+        size_fn = @|n : i32| { if n == 0 { 3 } else { 4 } },
+        access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_b_buffer.data)(a(0) * 4 + a(1))) }
+    };
 
-        print_tensor("input a", tensor_a);
-        print_tensor("input b", tensor_b);
+    print_tensor("input a", tensor_a);
+    print_tensor("input b", tensor_b);
 
-        //let output_size = @translate_tensor_size[f32](manager, tensor_a);
-        let output_size = [3 as i64, 4 as i64]; //The call above does not produce constants apparently.
-        let result_tensor = matrix_add(manager, tensor_a, tensor_b, output_size);
+    let output_size = [3 as i64, 4 as i64]; //The call above does not produce constants apparently.
+    let result_tensor = matrix_add(tensor_a, tensor_b, output_size);
 
-        print_tensor("result", result_tensor);
+    print_tensor("result", result_tensor);
 
-        write_idx("result.idx", 3, [1, 3, 4], [result_tensor.buffer]);
-    }
+    write_idx("result.idx", 3, [1, 3, 4], [result_tensor.buffer]);
 }

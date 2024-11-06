@@ -1,0 +1,6 @@
+fn @matrix_dropout [T](mat: Tensor[T], _output_size: &[i64]) -> Tensor[T] {
+    mat
+}
+
+#[intern]
+fn @matrix_dropout_f32 (mat: Tensor[f32], output_size: &[i64]) = @matrix_dropout[f32](mat, output_size);

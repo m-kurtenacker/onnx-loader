@@ -20,19 +20,10 @@ add_custom_command(
 
 anydsl_runtime_wrap(RESHAPE_NETWORK_WITHTOOLS_JSON
     FRONTEND "anyopt"
-    ANYOPT_FLAGS --pass cleanup_fix_point --keep-intern run_network
+    ANYOPT_FLAGS --keep-intern run_network --pass cleanup_fix_point
     EMIT_JSON
     NAME "network_withtools"
     FILES ${CMAKE_CURRENT_BINARY_DIR}/network.thorin.json ${NET_TOOLS_JSON}
-)
-
-anydsl_runtime_wrap(RESHAPE_NETWORK_COMPILED_JSON
-    FRONTEND "anyopt"
-    ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup
-    EMIT_JSON
-    NAME "network_compiled"
-    PLUGINS plugin/load_plugin.cpp
-    FILES ${RESHAPE_NETWORK_WITHTOOLS_JSON}
 )
 
 
@@ -46,16 +37,24 @@ anydsl_runtime_wrap(TEST_RESHAPE_MAIN_JSON
 
 anydsl_runtime_wrap(TEST_RESHAPE_MAIN_INT
     FRONTEND "anyopt"
-    ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup --keep-intern run_network
+    ANYOPT_FLAGS --keep-intern run_network --pass cleanup_fix_point
     EMIT_JSON
     NAME "test-compiled"
     FILES ${TEST_RESHAPE_MAIN_JSON}
 )
 
+anydsl_runtime_wrap(TEST_RESHAPE_ONNX_COMBINED
+    FRONTEND "anyopt"
+    ANYOPT_FLAGS --remove-interns
+    EMIT_JSON
+    NAME "test-combined"
+    FILES ${TEST_RESHAPE_MAIN_INT} ${RESHAPE_NETWORK_WITHTOOLS_JSON}
+)
+
 anydsl_runtime_wrap(TEST_RESHAPE_ONNX_OBJ
     FRONTEND "anyopt"
     PLUGINS plugin/load_plugin.cpp
-    FILES ${TEST_RESHAPE_MAIN_INT} ${RESHAPE_NETWORK_COMPILED_JSON}
+    FILES ${TEST_RESHAPE_ONNX_COMBINED}
 )
 
 add_executable(test_reshape_onnx ${TEST_RESHAPE_ONNX_OBJ} ${PROJECT_SOURCE_DIR}/src/utils/read.cpp ${PROJECT_SOURCE_DIR}/src/utils/allocator.cpp)

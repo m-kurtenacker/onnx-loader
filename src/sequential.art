@@ -1,9 +1,3 @@
-struct PassManager {
-    alloc: fn (i64) -> Buffer,
-    alloc_dynamic: fn(i64, i64) -> Buffer,
-    release: fn (Buffer) -> ()
-}
-
 #[intern]
 fn load_matrix_into_f32(tensor: Tensor[f32], file_name: &[u8], matrix_name: &[u8]) -> (fn () -> ()) {
     fn load_matrix() {
@@ -30,11 +24,11 @@ fn load_matrix_into_i64(tensor: Tensor[i64], file_name: &[u8], matrix_name: &[u8
     load_matrix
 }
 
-fn @get_buffer_managed(min_size: i64) = Buffer {
+/*fn @get_buffer_managed(min_size: i64) = Buffer {
     data = static_alloca(min_size)(),
     size = min_size,
     device = 0
-};
+};*/
 
 fn @get_buffer_dynamic(init: i64, num_elements: i64) = Buffer {
     data = bitcast[&mut[i8]](dynamic_array(init, num_elements)()),
@@ -42,26 +36,6 @@ fn @get_buffer_dynamic(init: i64, num_elements: i64) = Buffer {
     device = 0
 };
 
-fn @release_buffer_managed(_buffer : Buffer) { }
-
-/* Main entry point, define the allocation and release of memory */
-
-/*#[intern]
-fn sequential (body: fn(PassManager) -> ()) = @|| {
-    let manager = PassManager {
-        alloc = get_buffer_managed,
-        alloc_dynamic = get_buffer_dynamic,
-        release = @|buffer| { release_buffer_managed(buffer); },
-    };
-    @body(manager);
-};*/
-
-#[intern]
-fn sequential (body: fn(PassManager) -> ()) = @|| {
-    let manager = PassManager {
-        alloc = alloc_cpu,
-        alloc_dynamic = get_buffer_dynamic,
-        release = release,
-    };
-    @body(manager);
-};
+//fn @release_buffer_managed(_buffer : Buffer) { }
+static get_buffer_managed = alloc_cpu;
+static release_buffer_managed = release;

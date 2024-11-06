@@ -1,0 +1,15 @@
+fn @matrix_nllloss (mat: Tensor[f32], expected: i32) -> f32 {
+    let index_buffer_buffer = get_buffer_managed(sizeof[i64]() * 1 as i64);
+    let index_buffer = bitcast[&mut[i64]](index_buffer_buffer.data);
+
+    index_buffer(0) = expected as i64;
+
+    let r = - (*mat.access_fn(index_buffer));
+
+    release_buffer_managed(index_buffer_buffer);
+
+    r
+}
+
+#[intern]
+fn @matrix_nllloss_f32 (_manager: PassManager, mat: Tensor[f32], expected: i32) = @matrix_nllloss(mat, expected);

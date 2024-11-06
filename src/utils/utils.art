@@ -2,7 +2,7 @@ fn @round_down(n: i32, d: i32) -> i32 {
   (n / d) * d
 }
 
-fn @atomic_add (p: &mut f32, d : f32) {
+/*fn @atomic_add (p: &mut f32, d : f32) {
     atomic[f32](11, p, d, 7, "");
 }
 
@@ -111,4 +111,4 @@ fn @(?num) sort[T](num: i32, arr: &mut[T], cmp: fn(T, T)->bool) -> () {
         }
         arr(j) = x;
     }
-}
+}*/

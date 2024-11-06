@@ -1,8 +1,8 @@
-fn @matrix_transpose[T] (manager: PassManager, mat: Tensor[T], perm: &[i64], output_size: &[i64]) -> Tensor[T] {
+fn @matrix_transpose[T] (mat: Tensor[T], perm: &[i64], output_size: &[i64]) -> Tensor[T] {
     fn @output_size_fn(n : i32) -> i64 { output_size(n) }
 
     let new_access_fn = |n : &[i64]| {
-        let oldworld_address_buffer = manager.alloc_dynamic(0: i64, mat.num_dims as i64);
+        let oldworld_address_buffer = get_buffer_dynamic(0: i64, mat.num_dims as i64);
         let oldworld_address = bitcast[&mut [i64]](oldworld_address_buffer.data);
 
         for i in unroll(0, mat.num_dims) {
@@ -21,8 +21,8 @@ fn @matrix_transpose[T] (manager: PassManager, mat: Tensor[T], perm: &[i64], out
 }
 
 #[intern]
-fn @matrix_transpose_f32 (manager: PassManager, mat: Tensor[f32], perm: &[i64], output_size: &[i64]) -> Tensor[f32] {
-    let output = @matrix_transpose[f32](manager, mat, perm, output_size);
+fn @matrix_transpose_f32 (_manager: PassManager, mat: Tensor[f32], perm: &[i64], output_size: &[i64]) -> Tensor[f32] {
+    let output = @matrix_transpose[f32](mat, perm, output_size);
 
     output
 }

@@ -6,7 +6,7 @@ fn @matrix_avg_pool (manager: PassManager, input: Tensor[f32], output_size: &[i6
 
     fn @output_size_fn(n : i32) -> i64 { output_size(n) }
 
-    let output = @alloc_tensor[f32](manager, input.num_dims, output_size_fn);
+    let output = @alloc_tensor[f32](input.num_dims, output_size_fn);
 
     let mut kernel_size = 1 : i64;
     for index in unroll(0, input.num_dims) {
@@ -14,7 +14,7 @@ fn @matrix_avg_pool (manager: PassManager, input: Tensor[f32], output_size: &[i6
     }
 
     for inst_out in multi_loop(manager, input.num_dims, output_size) {
-        let input_dims_buffer = manager.alloc_dynamic(0 : i64, input.num_dims as i64);
+        let input_dims_buffer = get_buffer_dynamic(0 : i64, input.num_dims as i64);
         let input_dims = bitcast[&mut [i64]](input_dims_buffer.data);
 
         let chanel = inst_out.index(2);

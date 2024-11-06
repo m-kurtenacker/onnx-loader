@@ -56,7 +56,6 @@ enum LoopMode {
 }
 
 struct LoopInstance {
-    manager : PassManager,
     num_dims : i32,
     index : &mut[i64],
     min : &[i64],
@@ -64,11 +63,10 @@ struct LoopInstance {
     mode : &[LoopMode]
 }
 
-fn @make_loopinstance(manager : PassManager, num_dims : i32, n : &[i64]) -> LoopInstance {
-    let index_buffer = manager.alloc(sizeof[i64]() * num_dims as i64);
+fn @make_loopinstance(num_dims : i32, n : &[i64]) -> LoopInstance {
+    let index_buffer = get_buffer_managed(sizeof[i64]() * num_dims as i64);
 
     LoopInstance {
-        manager = manager,
         num_dims = num_dims,
         index = bitcast[&mut[i64]](index_buffer.data),
         min = static_array(0 as i64, num_dims as i64),
@@ -77,14 +75,14 @@ fn @make_loopinstance(manager : PassManager, num_dims : i32, n : &[i64]) -> Loop
     }
 }
 
-fn @multi_loop (body: fn(LoopInstance) -> ()) = @|manager: PassManager, num_dims: i32, n: &[i64]| {
-    let instance = make_loopinstance(manager, num_dims, n);
+fn @multi_loop (body: fn(LoopInstance) -> ()) = @|num_dims: i32, n: &[i64]| {
+    let instance = make_loopinstance(num_dims, n);
 
     multi_loop_instanced(body, 0, num_dims, instance);
 };
 
-fn @multi_loop_vector (body: fn(LoopInstance) -> ()) = @|manager: PassManager, num_dims: i32, n: &[i64]| {
-    let instance = make_loopinstance(manager, num_dims, n);
+fn @multi_loop_vector (body: fn(LoopInstance) -> ()) = @|num_dims: i32, n: &[i64]| {
+    let instance = make_loopinstance(num_dims, n);
 
     static_array_set_element(&instance.mode(0), LoopMode::Vectorized);
 
@@ -108,8 +106,7 @@ fn @(?current_dim & ?num_dims) multi_loop_instanced (body: fn(LoopInstance) -> (
                 let mut vector_buffers : [Buffer * 8];
 
                 for i in unroll(0, vector_width) {
-                    let index_buffer_alloc = instance.manager.alloc(sizeof[i64]() * instance.num_dims as i64);
-                    //let index_buffer_alloc = alloc_cpu(sizeof[i64]() * instance.num_dims as i64);
+                    let index_buffer_alloc = get_buffer_managed(sizeof[i64]() * instance.num_dims as i64);
 
                     let index_buffer = bitcast[&mut[i64]](index_buffer_alloc.data);
                     for j in unroll(0, current_dim) {
@@ -124,9 +121,7 @@ fn @(?current_dim & ?num_dims) multi_loop_instanced (body: fn(LoopInstance) -> (
                     let index_buffer = bitcast[&mut[i64]](index_buffer_alloc.data);
 
                     let current_instance = LoopInstance {
-                        manager = instance.manager,
                         num_dims = instance.num_dims,
-
                         index = index_buffer,
                         max = instance.max,
                         min = instance.min,
