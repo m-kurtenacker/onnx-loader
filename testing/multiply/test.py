@@ -4,26 +4,19 @@ import sys
 import os
 import subprocess
 
-from onnx import load
-from onnx.reference import ReferenceEvaluator
-from onnx.numpy_helper import from_array
-
 if len(sys.argv) > 1:
     current_source_dir = os.path.dirname(sys.argv[0])
     current_binary_dir = sys.argv[1]
-    subprocess.Popen([os.path.join(current_binary_dir, "test_conv_onnx")]).communicate()
+    subprocess.Popen([os.path.join(current_binary_dir, "test_multiply")]).communicate()
 
-a = idx2numpy.convert_from_file("test.idx")
-print(a)
+M = idx2numpy.convert_from_file("M.idx")
+t = idx2numpy.convert_from_file("t.idx")
+print(M)
+print(t)
+
 onnx_result = idx2numpy.convert_from_file("result.idx")
 
-with open("test.onnx", "rb") as f:
-    model = load(f)
-
-sess = ReferenceEvaluator(model)
-a = np.array(np.array([a]) / 255.0, dtype=np.float32)
-feeds = {'I': a}
-result = np.array([sess.run(None, feeds)[0] * 255.0], dtype=np.int32)
+result = np.dot(M, t)
 
 print(result)
 print(onnx_result)

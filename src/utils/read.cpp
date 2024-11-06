@@ -140,36 +140,67 @@ size_t * read_idx(char * filename, char ** images) {
 
     fclose(images_file);
 
-    size_t * sizes = (size_t*) malloc(sizeof(size_t) * (number_elements + 1));
-    for (int i = 0; i < number_elements; i++) {
+    size_t * sizes = (size_t*) malloc(sizeof(size_t) * (header_length + 1));
+    for (int i = 0; i < header_length; i++) {
         sizes[i] = dimension[i].value;
     }
-    sizes[number_elements] = 0;
+    sizes[header_length] = 0;
 
     return sizes;
 }
 
-void write_idx(char * filename, size_t * sizes, char * images) {
+void write_idx(char * filename, size_t * sizes, char * images, char type) {
     FILE * images_file = fopen(filename, "w");
 
-    image_header header;
+    size_t number_elements = 1;
+    int num_dims = 0;
+    while (sizes[num_dims]) {
+        number_elements *= sizes[num_dims];
+        num_dims++;
+    }
 
-    header.magic = 2051;
-    header.length = sizes[0];
-    header.rows = sizes[1];
-    header.cols = sizes[2];
+    union {
+        char data[4];
+        int value;
+    } magic;
 
-    assert(sizes[3] == 0);
+    magic.value = type << 8;
+    magic.data[0] = num_dims;
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 4; i++) {
         int endian_fixed_address = i - (i % 4) + (3 - i % 4);
-        unsigned char d = header.data[endian_fixed_address];
+        unsigned char d = magic.data[endian_fixed_address];
         fputc(d, images_file);
     }
 
-    for (int i = 0; i < header.length * header.rows * header.cols; i++) {
-        unsigned char d = images[i];
-        fputc(d, images_file);
+    for (int i = 0; i < num_dims; i++) {
+        union {
+            char data[4];
+            int value;
+        } dimension;
+
+        dimension.value = sizes[i];
+
+        for (int j = 0; j < 4; j++) {
+            int endian_fixed_address = j - (j % 4) + (3 - j % 4);
+            unsigned char d = dimension.data[endian_fixed_address];
+            fputc(d, images_file);
+        }
+    }
+
+    if (magic.value >> 8 == 0x8) {
+        for (int i = 0; i < number_elements; i++) {
+            unsigned char d = images[i];
+            fputc(d, images_file);
+        }
+    } else if (magic.value >> 8 == 0xd) {
+        for (int i = 0; i < sizeof(float) * number_elements; i++) {
+            int endian_fixed_address = i - (i % 4) + (3 - i % 4);
+            unsigned char d = images[endian_fixed_address];
+            fputc(d, images_file);
+        }
+    } else {
+        assert(false && "Cannot write this type right now!");
     }
 
     fclose(images_file);

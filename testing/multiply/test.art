@@ -3,9 +3,15 @@
 
 #[export]
 fn main() -> () {
-    let tensor_t = load_t();
-    let tensor_M = load_M();
+    for manager in sequential() {
+        let tensor_t = load_t();
+        let tensor_M = load_M();
 
-    print_tensor_256("M", tensor_M);
-    print_tensor_256("t", tensor_t);
+        print_tensor("M", tensor_M);
+        print_tensor("t", tensor_t);
+
+        let result_tensor = matrix_multiply(manager, tensor_t, tensor_M, [4 as i64]);
+
+        write_idx_float("result.idx", 1, [4], result_tensor.buffer);
+    }
 }

@@ -48,7 +48,7 @@ struct image_item {
 //
 //            let distance = mean - j as f32;
 //            let distance_sqr = distance * distance;
-//            
+//
 //            stddev += distance_sqr;
 //        }
 //        stddev = math_builtins::sqrt(stddev / (28 * 28))*/
@@ -119,7 +119,7 @@ fn read_idx(filename : &[u8]) -> &[Buffer] {
         items(i) = alloc_cpu(sizeof[&[f32]]() * sizes(1) * sizes(2));
 
         let image = bitcast[&mut[f32]](items(i).data);
-        
+
         for j in range(0, (sizes(1) * sizes(2)) as i32) {
             image(j) = images(j + i * (sizes(1) * sizes(2)) as i32) as f32 / 255.0;
         }
@@ -144,8 +144,7 @@ fn @read_idx_byte_scaled(filename : &[u8]) -> Buffer {
     tensor_buffer
 }
 
-#[intern]
-fn @read_idx_float(filename : &[u8]) -> Buffer {
+fn @read_idx_poly[T](filename : &[u8]) -> Buffer {
     let mut images: &[u8];
     let imagespp = &mut images;
     let sizes = read_idx_cpp(filename, imagespp);
@@ -155,6 +154,31 @@ fn @read_idx_float(filename : &[u8]) -> Buffer {
     while sizes(num_dims) > 0 {
         let current_size = sizes(num_dims);
         num_elements *= current_size;
+        num_dims += 1;
+    }
+
+    let tensor_buffer = alloc_cpu(sizeof[T]() * num_elements);
+    let tensor_data = bitcast[&mut[T]](tensor_buffer.data);
+
+    for j in range(0, num_elements as i32) {
+        let base = &(images((sizeof[T]() as i32) * j));
+        let base_cast = bitcast[&T](base);
+        tensor_data(j) = *base_cast;
+    }
+
+    tensor_buffer
+}
+
+#[intern]
+fn @read_idx_float(filename : &[u8]) -> Buffer {
+    let mut images: &[u8];
+    let imagespp = &mut images;
+    let sizes = read_idx_cpp(filename, imagespp);
+
+    let mut num_dims = 0 : i32;
+    let mut num_elements = 1 : i64;
+    while sizes(num_dims) > 0 {
+        num_elements *= sizes(num_dims);
         num_dims += 1;
     }
 
@@ -170,7 +194,20 @@ fn @read_idx_float(filename : &[u8]) -> Buffer {
     tensor_buffer
 }
 
-#[import(cc = "C", name = "write_idx")] fn write_idx_cpp(_filename: &[u8], _dims: &[i64], _data: &[u8]) -> ();
+#[import(cc = "C", name = "write_idx")] fn write_idx_cpp(_filename: &[u8], _dims: &[i64], _data: &[u8], _type: u8) -> ();
+
+#[intern]
+fn write_idx_float(filename : &[u8], num_dims : i32, dims : &[i64], items : Buffer) -> () {
+    let dims_buffer = alloc_cpu(sizeof[i64]() * (num_dims + 1) as i64);
+
+    let local_dims = bitcast[&mut[i64]](dims_buffer.data);
+    for i in range(0, num_dims) {
+        local_dims(i) = dims(i);
+    }
+    local_dims(num_dims) = 0; //Terminator for C.
+
+    write_idx_cpp (filename, local_dims, bitcast[&[u8]](items.data), 0xd);
+}
 
 fn write_idx(filename : &[u8], num_dims : i32, dims : &[i64], items : &[Buffer]) -> () {
     let mut total_size = 1 : i64;
@@ -192,12 +229,12 @@ fn write_idx(filename : &[u8], num_dims : i32, dims : &[i64], items : &[Buffer])
     for i in range(0, dims(0) as i32) {
         let current_item = items(i);
         let current_data = bitcast[&[f32]](current_item.data);
-        
+
         for j in range(0, (dims(1) * dims(2)) as i32) {
             //Yes, this double cast is necessary. Ask me how I know.
             images(j + i * (dims(1) * dims(2)) as i32) = ((current_data(j) * 255.0) as i32) as u8;
         }
     }
 
-    write_idx_cpp (filename, local_dims, images);
+    write_idx_cpp (filename, local_dims, images, 0x8);
 }
