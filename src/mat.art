@@ -69,7 +69,7 @@ fn @alloc_tensor[T] (num_dims : i32, size_fn : fn(i32) -> i64) = @alloc_tensor_l
 
 static print_enable = true;
 
-fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
+fn print_tensor_int[T] (name: &[u8], mat: Tensor[T], print_fn: fn(T) -> ()) -> () {
     if (print_enable) {
         print_string("Tensor ");
         print_string(name);
@@ -83,27 +83,27 @@ fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
 
         if mat.num_dims == 1 {
             for x in range(0, mat.size_fn(0) as i32) {
-                print_f32(*mat.access_fn([x as i64]));
+                print_fn(*mat.access_fn([x as i64]));
                 print_string(" ");
             }
             print_string("\n");
         } else if mat.num_dims == 2 {
-            for y in range(0, mat.size_fn(1) as i32) {
-                for x in range(0, mat.size_fn(0) as i32) {
-                    print_f32(*mat.access_fn([x as i64, y as i64]));
+            for y in range(0, mat.size_fn(0) as i32) {
+                for x in range(0, mat.size_fn(1) as i32) {
+                    print_fn(*mat.access_fn([y as i64, x as i64]));
                     print_string(" ");
                 }
                 print_string("\n");
             }
         } else if mat.num_dims == 3 {
-            for chan in range(0, mat.size_fn(2) as i32) {
+            for chan in range(0, mat.size_fn(0) as i32) {
                 print_string("chan_");
                 print_i32(chan);
                 print_string(":\n");
 
-                for y in range(0, mat.size_fn(0) as i32) {
-                    for x in range(0, mat.size_fn(1) as i32) {
-                        print_f32(*mat.access_fn([x as i64, y as i64, chan as i64]));
+                for y in range(0, mat.size_fn(1) as i32) {
+                    for x in range(0, mat.size_fn(2) as i32) {
+                        print_fn(*mat.access_fn([chan as i64, y as i64, x as i64]));
                         print_string(" ");
                     }
                     print_string("\n");
@@ -118,9 +118,9 @@ fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
                     print_i32(chan_in);
                     print_string(":\n");
 
-                    for y in range(0, mat.size_fn(3) as i32) {
-                        for x in range(0, mat.size_fn(2) as i32) {
-                            print_f32(*mat.access_fn([x as i64, y as i64, chan_in as i64, chan_out as i64]));
+                    for y in range(0, mat.size_fn(2) as i32) {
+                        for x in range(0, mat.size_fn(3) as i32) {
+                            print_fn(*mat.access_fn([chan_out as i64, chan_in as i64, y as i64, x as i64]));
                             print_string(" ");
                         }
                         print_string("\n");
@@ -131,134 +131,23 @@ fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
             print_string("Printing error: too many dimensions\n");
         }
     }
+}
+
+fn print_tensor (name: &[u8], mat: Tensor[f32]) -> () {
+    @print_tensor_int[f32](name, mat, print_f32);
 }
 
 fn print_tensor_i64 (name: &[u8], mat: Tensor[i64]) -> () {
-    if (print_enable) {
-        print_string("Tensor ");
-        print_string(name);
-        print_string(" [");
-        for i in range(0, mat.num_dims - 1) {
-            print_i64(mat.size_fn(i));
-            print_string(" x ");
-        }
-        print_i64(mat.size_fn(mat.num_dims - 1));
-        print_string("]:\n");
+    @print_tensor_int[i64](name, mat, print_i64);
+}
 
-        if mat.num_dims == 1 {
-            for x in range(0, mat.size_fn(0) as i32) {
-                print_i64(*mat.access_fn([x as i64]));
-                print_string(" ");
-            }
-            print_string("\n");
-        } else if mat.num_dims == 2 {
-            for y in range(0, mat.size_fn(1) as i32) {
-                for x in range(0, mat.size_fn(0) as i32) {
-                    print_i64(*mat.access_fn([x as i64, y as i64]));
-                    print_string(" ");
-                }
-                print_string("\n");
-            }
-        } else if mat.num_dims == 3 {
-            for chan in range(0, mat.size_fn(2) as i32) {
-                print_string("chan_");
-                print_i32(chan);
-                print_string(":\n");
-
-                for y in range(0, mat.size_fn(0) as i32) {
-                    for x in range(0, mat.size_fn(1) as i32) {
-                        print_i64(*mat.access_fn([x as i64, y as i64, chan as i64]));
-                        print_string(" ");
-                    }
-                    print_string("\n");
-                }
-            }
-        } else if mat.num_dims == 4 {
-            for chan_out in range(0, mat.size_fn(0) as i32) {
-                for chan_in in range(0, mat.size_fn(1) as i32) {
-                    print_string("chan_");
-                    print_i32(chan_out);
-                    print_string("x");
-                    print_i32(chan_in);
-                    print_string(":\n");
-
-                    for y in range(0, mat.size_fn(3) as i32) {
-                        for x in range(0, mat.size_fn(2) as i32) {
-                            print_i64(*mat.access_fn([x as i64, y as i64, chan_in as i64, chan_out as i64]));
-                            print_string(" ");
-                        }
-                        print_string("\n");
-                    }
-                }
-            }
-        } else {
-            print_string("Printing error: too many dimensions\n");
-        }
-    }
+fn print_tensor_u8 (name: &[u8], mat: Tensor[u8]) -> () {
+    @print_tensor_int[u8](name, mat, print_u8);
 }
 
 fn print_tensor_256 (name: &[u8], mat: Tensor[f32]) -> () {
-    if (print_enable) {
-        print_string("Tensor ");
-        print_string(name);
-        print_string(" [");
-        for i in range(0, mat.num_dims - 1) {
-            print_i64(mat.size_fn(i));
-            print_string(" x ");
-        }
-        print_i64(mat.size_fn(mat.num_dims - 1));
-        print_string("]:\n");
-
-        if mat.num_dims == 1 {
-            for x in range(0, mat.size_fn(0) as i32) {
-                print_f32(*mat.access_fn([x as i64]) * 255.0);
-                print_string(" ");
-            }
-            print_string("\n");
-        } else if mat.num_dims == 2 {
-            for y in range(0, mat.size_fn(1) as i32) {
-                for x in range(0, mat.size_fn(0) as i32) {
-                    print_f32(*mat.access_fn([x as i64, y as i64]) * 255.0);
-                    print_string(" ");
-                }
-                print_string("\n");
-            }
-        } else if mat.num_dims == 3 {
-            for chan in range(0, mat.size_fn(2) as i32) {
-                print_string("chan_");
-                print_i32(chan);
-                print_string(":\n");
-
-                for y in range(0, mat.size_fn(0) as i32) {
-                    for x in range(0, mat.size_fn(1) as i32) {
-                        print_f32(*mat.access_fn([x as i64, y as i64, chan as i64]) * 255.0);
-                        print_string(" ");
-                    }
-                    print_string("\n");
-                }
-            }
-        } else if mat.num_dims == 4 {
-            for chan_out in range(0, mat.size_fn(0) as i32) {
-                for chan_in in range(0, mat.size_fn(1) as i32) {
-                    print_string("chan_");
-                    print_i32(chan_out);
-                    print_string("x");
-                    print_i32(chan_in);
-                    print_string(":\n");
-
-                    for y in range(0, mat.size_fn(3) as i32) {
-                        for x in range(0, mat.size_fn(2) as i32) {
-                            print_f32(*mat.access_fn([x as i64, y as i64, chan_in as i64, chan_out as i64]) * 255.0);
-                            print_string(" ");
-                        }
-                        print_string("\n");
-                    }
-                }
-            }
-        } else {
-            print_string("Printing error: too many dimensions\n");
-        }
-    }
+    let print_scaled = @|f : f32| { print_f32(f * 255.0); };
+    @print_tensor_int[f32](name, mat, print_scaled);
 }
 
 fn print_array_i64 (name: &[u8], array: &[i64], num_elements: i32) -> () {
