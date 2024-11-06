@@ -273,10 +273,8 @@ def build_node(onnx_node):
 with Thorin("network") as network:
     network.include(NETWORK_TOOLS_PATH)
 
-    build_tensor_thorin = network.find_imported_def("build_tensor_f32")
-    alloc_tensor_thorin = network.find_imported_def("alloc_tensor_f32")
-    alloc_initializer_f32_thorin = network.find_imported_def("alloc_initializer_f32")
-    alloc_initializer_i64_thorin = network.find_imported_def("alloc_initializer_i64")
+    alloc_initializer_f32_thorin = network.find_imported_def("alloc_tensor_f32")
+    alloc_initializer_i64_thorin = network.find_imported_def("alloc_tensor_i64")
     load_matrix_into_f32 = network.find_imported_def("load_matrix_into_f32")
     load_matrix_into_i64 = network.find_imported_def("load_matrix_into_i64")
 
