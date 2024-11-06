@@ -32,16 +32,21 @@ class ConstantTensor:
         else:
             module = tModule
 
-        build_tensor_thorin = module.find_imported_def("build_tensor_f32") #fn(mem, Buffer, i32, fn(mem, i32, fn(mem, i64)), fn(mem, Tensor))
-        load_idx_scaled_thorin = module.find_imported_def("read_idx_byte_scaled") #fn(mem, &[u8], fn(mem, Buffer))
-        load_idx_thorin = module.find_imported_def("read_idx_float") #fn(mem, &[u8], fn(mem, Buffer))
+        build_tensor_byte_thorin = module.find_imported_def("build_tensor_u8") #fn(mem, Buffer, i32, fn(mem, i32, fn(mem, i64)), fn(mem, Tensor))
+        build_tensor_float_thorin = module.find_imported_def("build_tensor_f32") #fn(mem, Buffer, i32, fn(mem, i32, fn(mem, i64)), fn(mem, Tensor))
+        load_idx_byte_thorin = module.find_imported_def("read_idx_byte") #fn(mem, &[u8], fn(mem, Buffer))
+        load_idx_float_thorin = module.find_imported_def("read_idx_float") #fn(mem, &[u8], fn(mem, Buffer))
 
-        mem_type = build_tensor_thorin.type.args[0]
-        buffer_type = build_tensor_thorin.type.args[1]
-        i32_type = build_tensor_thorin.type.args[2]
-        size_fn_type = build_tensor_thorin.type.args[3]
+        mem_type = build_tensor_byte_thorin.type.args[0]
+        buffer_type = build_tensor_byte_thorin.type.args[1]
+        i32_type = build_tensor_byte_thorin.type.args[2]
+        size_fn_type = build_tensor_byte_thorin.type.args[3]
         i64_type = size_fn_type.args[2].args[1]
-        tensor_type = build_tensor_thorin.type.args[4].args[-1]
+
+        if self.content.dtype == np.float32:
+            tensor_type = build_tensor_float_thorin.type.args[4].args[-1]
+        else:
+            tensor_type = build_tensor_byte_thorin.type.args[4].args[-1]
 
         num_dimensions = ThorinConstant(i32_type, len(self.shape))
         thorin_dimensions = list(map(lambda x: ThorinConstant(i64_type, x), self.shape))
@@ -52,13 +57,14 @@ class ConstantTensor:
             size_lambda(size_return, size_mem, r)
 
         with ThorinContinuation(ThorinFnType([mem_type], tensor_type), internal="load_" + self.name, thorin=module) as (load_tensor, load_tensor_mem, ret_function):
-            with ThorinContinuation(ThorinFnType([mem_type, buffer_type])) as (build_tensors, tensor_mem, input_buffer):
-                build_tensors(build_tensor_thorin, tensor_mem, input_buffer, num_dimensions, size_lambda, ret_function)
-
             if self.content.dtype == np.float32:
-                load_tensor(load_idx_thorin, load_tensor_mem, thorinString(self.filename("idx")), build_tensors)
+                with ThorinContinuation(ThorinFnType([mem_type, buffer_type])) as (build_tensors, tensor_mem, input_buffer):
+                    build_tensors(build_tensor_float_thorin, tensor_mem, input_buffer, num_dimensions, size_lambda, ret_function)
+                load_tensor(load_idx_float_thorin, load_tensor_mem, thorinString(self.filename("idx")), build_tensors)
             else:
-                load_tensor(load_idx_scaled_thorin, load_tensor_mem, thorinString(self.filename("idx")), build_tensors)
+                with ThorinContinuation(ThorinFnType([mem_type, buffer_type])) as (build_tensors, tensor_mem, input_buffer):
+                    build_tensors(build_tensor_byte_thorin, tensor_mem, input_buffer, num_dimensions, size_lambda, ret_function)
+                load_tensor(load_idx_byte_thorin, load_tensor_mem, thorinString(self.filename("idx")), build_tensors)
 
         if tModule is None:
             module.__exit__(0, 0, 0)

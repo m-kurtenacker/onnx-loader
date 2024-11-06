@@ -1,27 +1,27 @@
 #[intern]
-fn load_test() -> Tensor[f32];
+fn load_test() -> Tensor[u8];
 
 #[export]
 fn main() -> i32 {
     let test = @load_test();
 
-    print_tensor_256("test", test);
+    print_tensor_u8("test", test);
 
-    if ((*test.access_fn([0, 0, 0]) * 255.0) as i32) != 1 { return(1) }
-    if ((*test.access_fn([0, 0, 1]) * 255.0) as i32) != 2 { return(1) }
-    if ((*test.access_fn([0, 0, 2]) * 255.0) as i32) != 3 { return(1) }
+    if (*test.access_fn([0, 0, 0]) as i32) != 1 { return(1) }
+    if (*test.access_fn([0, 0, 1]) as i32) != 2 { return(1) }
+    if (*test.access_fn([0, 0, 2]) as i32) != 3 { return(1) }
 
-    if ((*test.access_fn([0, 1, 0]) * 255.0) as i32) != 4 { return(1) }
-    if ((*test.access_fn([0, 1, 1]) * 255.0) as i32) != 5 { return(1) }
-    if ((*test.access_fn([0, 1, 2]) * 255.0) as i32) != 6 { return(1) }
+    if (*test.access_fn([0, 1, 0]) as i32) != 4 { return(1) }
+    if (*test.access_fn([0, 1, 1]) as i32) != 5 { return(1) }
+    if (*test.access_fn([0, 1, 2]) as i32) != 6 { return(1) }
 
-    if ((*test.access_fn([0, 2, 0]) * 255.0) as i32) != 7 { return(1) }
-    if ((*test.access_fn([0, 2, 1]) * 255.0) as i32) != 8 { return(1) }
-    if ((*test.access_fn([0, 2, 2]) * 255.0) as i32) != 9 { return(1) }
+    if (*test.access_fn([0, 2, 0]) as i32) != 7 { return(1) }
+    if (*test.access_fn([0, 2, 1]) as i32) != 8 { return(1) }
+    if (*test.access_fn([0, 2, 2]) as i32) != 9 { return(1) }
 
-    if ((*test.access_fn([0, 3, 0]) * 255.0) as i32) != 10 { return(1) }
-    if ((*test.access_fn([0, 3, 1]) * 255.0) as i32) != 11 { return(1) }
-    if ((*test.access_fn([0, 3, 2]) * 255.0) as i32) != 12 { return(1) }
+    if (*test.access_fn([0, 3, 0]) as i32) != 10 { return(1) }
+    if (*test.access_fn([0, 3, 1]) as i32) != 11 { return(1) }
+    if (*test.access_fn([0, 3, 2]) as i32) != 12 { return(1) }
 
     return(0)
 }

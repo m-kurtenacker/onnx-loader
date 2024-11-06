@@ -128,22 +128,6 @@ fn read_idx(filename : &[u8]) -> &[Buffer] {
     items
 }
 
-#[intern]
-fn @read_idx_byte_scaled(filename : &[u8]) -> Buffer {
-    let mut images: &[u8];
-    let imagespp = &mut images;
-    let sizes = read_idx_cpp(filename, imagespp);
-
-    let tensor_buffer = alloc_cpu(sizeof[f32]() * sizes(0) * sizes(1) * sizes(2));
-    let tensor_data = bitcast[&mut[f32]](tensor_buffer.data);
-
-    for j in range(0, (sizes(0) * sizes(1) * sizes(2)) as i32) {
-        tensor_data(j) = (images(j) as f32) / 255.0;
-    }
-
-    tensor_buffer
-}
-
 fn @read_idx_poly[T](filename : &[u8]) -> Buffer {
     let mut images: &[u8];
     let imagespp = &mut images;
@@ -169,30 +153,8 @@ fn @read_idx_poly[T](filename : &[u8]) -> Buffer {
     tensor_buffer
 }
 
-#[intern]
-fn @read_idx_float(filename : &[u8]) -> Buffer {
-    let mut images: &[u8];
-    let imagespp = &mut images;
-    let sizes = read_idx_cpp(filename, imagespp);
-
-    let mut num_dims = 0 : i32;
-    let mut num_elements = 1 : i64;
-    while sizes(num_dims) > 0 {
-        num_elements *= sizes(num_dims);
-        num_dims += 1;
-    }
-
-    let tensor_buffer = alloc_cpu(sizeof[f32]() * num_elements);
-    let tensor_data = bitcast[&mut[f32]](tensor_buffer.data);
-
-    for j in range(0, num_elements as i32) {
-        let base = &(images((sizeof[f32]() as i32) * j));
-        let base_cast = bitcast[&f32](base);
-        tensor_data(j) = *base_cast;
-    }
-
-    tensor_buffer
-}
+#[intern] fn @read_idx_byte(filename : &[u8]) = read_idx_poly[u8](filename);
+#[intern] fn @read_idx_float(filename : &[u8]) = read_idx_poly[f32](filename);
 
 #[import(cc = "C", name = "write_idx")] fn write_idx_cpp(_filename: &[u8], _dims: &[i64], _data: &[u8], _type: u8) -> ();
 

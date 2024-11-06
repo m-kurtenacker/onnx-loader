@@ -43,6 +43,7 @@ fn @build_tensor_layout[T] (buffer : Buffer, num_dims : i32, size_fn : fn(i32) -
 }
 
 //Required for ConstantTensor.py
+#[intern] fn @build_tensor_u8 (buffer: Buffer, num_dims: i32, size_fn : fn(i32) -> i64) = @build_tensor_layout[u8](buffer, num_dims, size_fn, AllocLayout::RowMayor);
 #[intern] fn @build_tensor_f32 (buffer: Buffer, num_dims: i32, size_fn : fn(i32) -> i64) = @build_tensor_layout[f32](buffer, num_dims, size_fn, AllocLayout::RowMayor);
 
 fn @alloc_tensor_layout[T] (num_dims : i32, size_fn : fn(i32) -> i64, layout : AllocLayout) -> Tensor[T] {
