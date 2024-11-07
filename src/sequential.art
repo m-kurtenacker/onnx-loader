@@ -29,6 +29,7 @@ fn load_matrix_into_i64(tensor: Tensor[i64], file_name: &[u8], matrix_name: &[u8
     size = min_size,
     device = 0
 };*/
+//fn @release_buffer_managed(_buffer : Buffer) { }
 
 fn @get_buffer_dynamic(init: i64, num_elements: i64) = Buffer {
     data = bitcast[&mut[i8]](dynamic_array(init, num_elements)()),
@@ -36,6 +37,5 @@ fn @get_buffer_dynamic(init: i64, num_elements: i64) = Buffer {
     device = 0
 };
 
-//fn @release_buffer_managed(_buffer : Buffer) { }
 static get_buffer_managed = alloc_cpu;
 static release_buffer_managed = release;
