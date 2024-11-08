@@ -4,7 +4,7 @@
 fn main() -> () {
     let run_network = setup_network();
 
-    let data = read_idx("test.idx");
+    let data = read_idx_scaled("test.idx");
 
     let tensor_a_buffer = data(0);
 
@@ -20,5 +20,5 @@ fn main() -> () {
 
     result_buffer = result_tensor.buffer;
 
-    write_idx("result.idx", 3, [1, 3, 4], [result_buffer]);
+    write_idx_scaled("result.idx", 3, [1, 3, 4], [result_buffer]);
 }

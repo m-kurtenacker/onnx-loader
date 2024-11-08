@@ -1,6 +1,6 @@
 #[export]
 fn main() -> () {
-    let data = read_idx("test.idx");
+    let data = read_idx_scaled("test.idx");
 
     let tensor_a_buffer = data(0);
     let tensor_b_buffer = data(1);
@@ -27,5 +27,5 @@ fn main() -> () {
 
     print_tensor("result", result_tensor);
 
-    write_idx("result.idx", 3, [1, 3, 4], [result_tensor.buffer]);
+    write_idx_scaled("result.idx", 3, [1, 3, 4], [result_tensor.buffer]);
 }
