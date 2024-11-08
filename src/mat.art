@@ -1,20 +1,35 @@
 /* Tensor base definition and some utils. */
 
+enum AddrMode {
+    RowMayor,
+    ColMayor
+}
+
 struct Tensor[T] {
     buffer : Buffer,
     num_dims : i32,
+    addr_mode: AddrMode,
     size_fn: fn(i32) -> i64,
     access_fn: fn(&[i64]) -> &mut T
 }
 
+/* TODO: find a solution for this type of casting
+fn @copy_tensor_data[S, T](src: Tensor[S], dst: Tensor[T]) {
+    let sizes_buffer = get_buffer_dynamic(0: i64, src.num_dims as i64);
+    let sizes = bitcast[&mut [i64]](sizes_buffer.data);
+
+    for i in unroll(0, src.num_dims) {
+        sizes(i) = src.size_fn(i);
+    }
+
+    for instance in multi_loop(src.num_dims, sizes) {
+        *dst.access_fn(instance.index) = *src.access_fn(instance.index) as T;
+    }
+}*/
+
 /* Allocate and Release tensors, with different memory layouts as needed */
 
-enum AllocLayout {
-    RowMayor,
-    ColumnMayor
-}
-
-fn @build_tensor_layout[T] (buffer : Buffer, num_dims : i32, size_fn : fn(i32) -> i64, layout : AllocLayout) -> Tensor[T] {
+fn @build_tensor_layout[T] (buffer : Buffer, num_dims : i32, size_fn : fn(i32) -> i64, layout : AddrMode) -> Tensor[T] {
     let access_fn_col = |n : &[i64]| {
         let mut address = n(num_dims - 1);
         for i in unroll(0, num_dims - 1) {
@@ -34,19 +49,22 @@ fn @build_tensor_layout[T] (buffer : Buffer, num_dims : i32, size_fn : fn(i32) -
     Tensor[T] {
         buffer = buffer,
         num_dims = num_dims,
+        addr_mode = layout,
         size_fn = size_fn,
         access_fn = match layout {
-            AllocLayout::ColumnMayor => access_fn_col,
-            AllocLayout::RowMayor => access_fn_row,
+            AddrMode::ColMayor => access_fn_col,
+            AddrMode::RowMayor => access_fn_row,
         }
     }
 }
 
-//Required for ConstantTensor.py
-#[intern] fn @build_tensor_u8 (buffer: Buffer, num_dims: i32, size_fn : fn(i32) -> i64) = @build_tensor_layout[u8](buffer, num_dims, size_fn, AllocLayout::RowMayor);
-#[intern] fn @build_tensor_f32 (buffer: Buffer, num_dims: i32, size_fn : fn(i32) -> i64) = @build_tensor_layout[f32](buffer, num_dims, size_fn, AllocLayout::RowMayor);
+fn @build_tensor[T](buffer: Buffer, num_dims: i32, size_fn : fn(i32) -> i64) = @build_tensor_layout[T](buffer, num_dims, size_fn, AddrMode::RowMayor);
 
-fn @alloc_tensor_layout[T] (num_dims : i32, size_fn : fn(i32) -> i64, layout : AllocLayout) -> Tensor[T] {
+//Required for ConstantTensor.py
+#[intern] fn @build_tensor_u8 (buffer: Buffer, num_dims: i32, size_fn : fn(i32) -> i64) = @build_tensor[u8](buffer, num_dims, size_fn);
+#[intern] fn @build_tensor_f32 (buffer: Buffer, num_dims: i32, size_fn : fn(i32) -> i64) = @build_tensor[f32](buffer, num_dims, size_fn);
+
+fn @alloc_tensor_layout[T] (num_dims : i32, size_fn : fn(i32) -> i64, layout : AddrMode) -> Tensor[T] {
     let mut size = 1 as i64;
     for i in unroll (0, num_dims) {
         size *= size_fn(i);
@@ -58,7 +76,7 @@ fn @alloc_tensor_layout[T] (num_dims : i32, size_fn : fn(i32) -> i64, layout : A
 }
 
 
-fn @alloc_tensor[T] (num_dims : i32, size_fn : fn(i32) -> i64) = @alloc_tensor_layout[T](num_dims, size_fn, AllocLayout::RowMayor);
+fn @alloc_tensor[T] (num_dims : i32, size_fn : fn(i32) -> i64) = @alloc_tensor_layout[T](num_dims, size_fn, AddrMode::RowMayor);
 
 //Required for network.py
 #[intern] fn @alloc_tensor_f32 (num_dims: i32, size_fn : fn(i32) -> i64) = @alloc_tensor[f32](num_dims, size_fn);

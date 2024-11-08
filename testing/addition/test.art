@@ -8,6 +8,7 @@ fn main() -> () {
     let tensor_a = Tensor[f32] {
         buffer = tensor_a_buffer,
         num_dims = 2,
+        addr_mode = AddrMode::RowMayor,
         size_fn = @|n : i32| { if n == 0 { 3 } else { 4 } },
         access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_a_buffer.data)(a(0) * 4 + a(1))) }
     };
@@ -15,6 +16,7 @@ fn main() -> () {
     let tensor_b = Tensor[f32] {
         buffer = tensor_b_buffer,
         num_dims = 2,
+        addr_mode = AddrMode::RowMayor,
         size_fn = @|n : i32| { if n == 0 { 3 } else { 4 } },
         access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_b_buffer.data)(a(0) * 4 + a(1))) }
     };

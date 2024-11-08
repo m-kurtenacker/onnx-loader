@@ -1,6 +1,7 @@
 //#[export] static mut time_add : i64;
 
-fn @matrix_add_intern (matA: Tensor[f32], matB: Tensor[f32], output: Tensor[f32], output_size: &[i64]) -> () {
+#[intern]
+fn @matrix_add_impl (matA: Tensor[f32], matB: Tensor[f32], output: Tensor[f32], output_size: &[i64]) -> () {
     //let start = get_micro_time();
 
     for instance in multi_loop (matA.num_dims, output_size) {
@@ -19,7 +20,7 @@ fn @matrix_add (matA: Tensor[f32], matB: Tensor[f32], output_size: &[i64]) -> Te
 
     let output = @alloc_tensor[f32](matA.num_dims, output_size_fn);
 
-    matrix_add_intern (matA, matB, output, output_size);
+    matrix_add_impl (matA, matB, output, output_size);
 
     print_tensor("Addition", output);
 

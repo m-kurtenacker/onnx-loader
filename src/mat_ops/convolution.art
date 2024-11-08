@@ -1,7 +1,7 @@
 //#[export] static mut time_conv : i64;
 
 #[intern]
-fn @matrix_convolution_padded_impl (input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], output_size: &[i64], kernel_shape: &[i64], stride: &[i64], padding: &[i64], output: Tensor[f32]) -> Tensor[f32] {
+fn @matrix_convolution_padded_impl (input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], _output_size: &[i64], kernel_shape: &[i64], stride: &[i64], padding: &[i64], output: Tensor[f32]) -> Tensor[f32] {
     //let start = get_micro_time();
 
     let num_out_chan = output.size_fn(1) as i32;

@@ -50,6 +50,7 @@ fn @matrix_reshape[T] (mat: Tensor[T], num_output_dims : i32, output_size: &[i64
     Tensor[T] {
         buffer = mat.buffer,
         num_dims = num_output_dims,
+        addr_mode = AddrMode::RowMayor,
         size_fn = output_size_fn,
         access_fn = new_access_fn
     }

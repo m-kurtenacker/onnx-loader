@@ -49,7 +49,7 @@ def alloc_initializer(entry_mem, finish_cont, dimensions):
 
     local_tensor_type = finish_cont.type.args[1]
 
-    with ThorinContinuation(local_tensor_type.formated_args[2][1], filter=True) as (size_lambda, size_mem, dimension, size_return):
+    with ThorinContinuation(local_tensor_type.formated_args[3][1], filter=True) as (size_lambda, size_mem, dimension, size_return):
         r = ThorinExtract(sizes, dimension)
         size_lambda(size_return, size_mem, r)
 

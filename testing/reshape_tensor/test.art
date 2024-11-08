@@ -7,6 +7,7 @@ fn main() -> () {
     let tensor_a = Tensor[f32] {
         buffer = tensor_a_buffer,
         num_dims = 2,
+        addr_mode = AddrMode::RowMayor,
         size_fn = @|n : i32| { if n == 0 { 4 } else { 3 } },
         access_fn = @|a : &[i64]| { &mut (bitcast[&mut[f32]](tensor_a_buffer.data)(a(0) * 3 + a(1))) }
     };
@@ -21,6 +22,7 @@ fn main() -> () {
     let reshape_1_tensor = Tensor[i64] {
         buffer = reshape_1_buffer,
         num_dims = 1,
+        addr_mode = AddrMode::RowMayor,
         size_fn = @|n : i32| { if n == 0 { 3 } else { 0 } },
         access_fn = @|a : &[i64]| { &mut (reshape_1_size(a(0))) }
     };
@@ -38,6 +40,7 @@ fn main() -> () {
     let reshape_2_tensor = Tensor[i64] {
         buffer = reshape_2_buffer,
         num_dims = 1,
+        addr_mode = AddrMode::RowMayor,
         size_fn = @|n : i32| { if n == 0 { 2 } else { 0 } },
         access_fn = @|a : &[i64]| { &mut (reshape_2_size(a(0))) }
     };
