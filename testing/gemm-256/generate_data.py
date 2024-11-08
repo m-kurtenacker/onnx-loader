@@ -13,9 +13,9 @@ else:
 
 rng = np.random.default_rng()
 
-k = 2
-m = 8
-n = 6
+k = 256
+m = 256
+n = 256
 
 A = rng.random((m, k), dtype=np.float32)
 B = rng.random((k, n), dtype=np.float32)

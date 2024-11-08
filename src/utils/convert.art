@@ -1,0 +1,22 @@
+fn @convert_tensor_size[T](t : Tensor[T]) -> &mut[i64] {
+    let sizes_buffer = get_buffer_dynamic(0: i64, t.num_dims as i64);
+    let sizes = bitcast[&mut [i64]](sizes_buffer.data);
+
+    for n in unroll(0, t.num_dims) {
+        sizes(n) = t.size_fn(n);
+    }
+
+    sizes
+}
+
+fn @copy_tensor_f32_f16(src: Tensor[f32], dst: Tensor[f16]) -> () {
+    for work_item in multi_loop(dst.num_dims, convert_tensor_size(dst)) {
+        *dst.access_fn(work_item.index) = *src.access_fn(work_item.index) as f16;
+    }
+}
+
+fn @copy_tensor_f16_f32(src: Tensor[f16], dst: Tensor[f32]) -> () {
+    for work_item in multi_loop(dst.num_dims, convert_tensor_size(dst)) {
+        *dst.access_fn(work_item.index) = *src.access_fn(work_item.index) as f32;
+    }
+}

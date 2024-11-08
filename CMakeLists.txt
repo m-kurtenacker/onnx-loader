@@ -20,6 +20,8 @@ set(SUPPORT_FILES
     ${PROJECT_SOURCE_DIR}/src/utils/read.art
     ${PROJECT_SOURCE_DIR}/src/utils/utils.art
     ${PROJECT_SOURCE_DIR}/src/utils/loop.art
+    ${PROJECT_SOURCE_DIR}/src/utils/wmma.art
+    ${PROJECT_SOURCE_DIR}/src/utils/convert.art
     ${PROJECT_SOURCE_DIR}/src/sequential.art
     ${PROJECT_SOURCE_DIR}/src/mat.art
     ${MAT_OPS}

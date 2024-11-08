@@ -1,0 +1,576 @@
+/*
+ * D = A * B + C
+ *
+ * Where:
+ *
+ * A:    (  -> K )
+ *       (       )
+ *       (| M    )
+ *       (V      )
+ *
+ * B:    (  -> N )
+ *       (       )
+ *       (| K    )
+ *       (V      )
+ *
+ * C, D: (  -> N )
+ *       (       )
+ *       (| M    )
+ *       (V      )
+ */
+
+// This should never change™.
+static warp_size = 32;
+
+//See llvm-project/llvm/test/CodeGen/NVPTX $ python wmma-ptx71-sm80.py for a somewhat decent list of operations.
+//Matrix load operations for each of the three inputs. Separate operations need to be used as the data layout on device changes with the operator in question.
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.a.row.f16.p0")]
+fn nvvm_load_a_row (_addr : &i8) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.b.row.f16.p0")]
+fn nvvm_load_b_row (_addr : &i8) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.c.row.f16.p0")]
+fn nvvm_load_c_row (_addr : &i8) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.a.col.f16.p0")]
+fn nvvm_load_a_col (_addr : &i8) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.b.col.f16.p0")]
+fn nvvm_load_b_col (_addr : &i8) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.c.col.f16.p0")]
+fn nvvm_load_c_col (_addr : &i8) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+
+
+//Strided variants. The default stride with these operations is 16, larger strides can be specified with these operations.
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.a.row.stride.f16.p0")]
+fn nvvm_load_a_row_stride (_addr : &i8, _stride : i32) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.b.row.stride.f16.p0")]
+fn nvvm_load_b_row_stride (_addr : &i8, _stride : i32) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.c.row.stride.f16.p0")]
+fn nvvm_load_c_row_stride (_addr : &i8, _stride : i32) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.a.col.stride.f16.p0")]
+fn nvvm_load_a_col_stride (_addr : &i8, _stride : i32) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.b.col.stride.f16.p0")]
+fn nvvm_load_b_col_stride (_addr : &i8, _stride : i32) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.load.c.col.stride.f16.p0")]
+fn nvvm_load_c_col_stride (_addr : &i8, _stride : i32) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+
+
+//The actual WMMA operation. No strides or anything; this operates on registers.
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.mma.row.row.f16.f16")]
+fn nvvm_wmma_row_row (_a0 : simd[f16 * 2], _a1 : simd[f16 * 2], _a2 : simd[f16 * 2], _a3 : simd[f16 * 2], _a4 : simd[f16 * 2], _a5 : simd[f16 * 2], _a6 : simd[f16 * 2], _a7 : simd[f16 * 2], _b0 : simd[f16 * 2], _b1 : simd[f16 * 2], _b2 : simd[f16 * 2], _b3 : simd[f16 * 2], _b4 : simd[f16 * 2], _b5 : simd[f16 * 2], _b6 : simd[f16 * 2], _b7 : simd[f16 * 2], _c0 : simd[f16 * 2], _c1 : simd[f16 * 2], _c2 : simd[f16 * 2], _c3 : simd[f16 * 2]) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.mma.col.row.f16.f16")]
+fn nvvm_wmma_col_row (_a0 : simd[f16 * 2], _a1 : simd[f16 * 2], _a2 : simd[f16 * 2], _a3 : simd[f16 * 2], _a4 : simd[f16 * 2], _a5 : simd[f16 * 2], _a6 : simd[f16 * 2], _a7 : simd[f16 * 2], _b0 : simd[f16 * 2], _b1 : simd[f16 * 2], _b2 : simd[f16 * 2], _b3 : simd[f16 * 2], _b4 : simd[f16 * 2], _b5 : simd[f16 * 2], _b6 : simd[f16 * 2], _b7 : simd[f16 * 2], _c0 : simd[f16 * 2], _c1 : simd[f16 * 2], _c2 : simd[f16 * 2], _c3 : simd[f16 * 2]) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.mma.row.col.f16.f16")]
+fn nvvm_wmma_row_col (_a0 : simd[f16 * 2], _a1 : simd[f16 * 2], _a2 : simd[f16 * 2], _a3 : simd[f16 * 2], _a4 : simd[f16 * 2], _a5 : simd[f16 * 2], _a6 : simd[f16 * 2], _a7 : simd[f16 * 2], _b0 : simd[f16 * 2], _b1 : simd[f16 * 2], _b2 : simd[f16 * 2], _b3 : simd[f16 * 2], _b4 : simd[f16 * 2], _b5 : simd[f16 * 2], _b6 : simd[f16 * 2], _b7 : simd[f16 * 2], _c0 : simd[f16 * 2], _c1 : simd[f16 * 2], _c2 : simd[f16 * 2], _c3 : simd[f16 * 2]) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.mma.col.col.f16.f16")]
+fn nvvm_wmma_col_col (_a0 : simd[f16 * 2], _a1 : simd[f16 * 2], _a2 : simd[f16 * 2], _a3 : simd[f16 * 2], _a4 : simd[f16 * 2], _a5 : simd[f16 * 2], _a6 : simd[f16 * 2], _a7 : simd[f16 * 2], _b0 : simd[f16 * 2], _b1 : simd[f16 * 2], _b2 : simd[f16 * 2], _b3 : simd[f16 * 2], _b4 : simd[f16 * 2], _b5 : simd[f16 * 2], _b6 : simd[f16 * 2], _b7 : simd[f16 * 2], _c0 : simd[f16 * 2], _c1 : simd[f16 * 2], _c2 : simd[f16 * 2], _c3 : simd[f16 * 2]) -> (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]);
+
+
+//Store the result matrix back on disk.
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.store.d.row.f16.p0")]
+fn nvvm_store_d_row (_addr : &mut i8, simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]) -> ();
+
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.store.d.col.f16.p0")]
+fn nvvm_store_d_col (_addr : &mut i8, simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]) -> ();
+
+
+//Again, a strided variant of that operation.
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.store.d.row.stride.f16.p0")]
+fn nvvm_store_d_row_stride (_addr : &mut i8, simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], _stride : i32) -> ();
+
+#[import(cc = "device", name = "llvm.nvvm.wmma.m16n16k16.store.d.col.stride.f16.p0")]
+fn nvvm_store_d_col_stride (_addr : &mut i8, simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], _stride : i32) -> ();
+
+struct Matrix {
+    data : &mut [f16],
+    x_dim : i32,
+    y_dim : i32,
+    addr_mode : AddrMode,
+    stride : i32 //row to row offset for this matrix.
+}
+
+fn @addr_tensor (x : i32, y : i32, t : Matrix) = match t.addr_mode {
+    AddrMode::RowMayor => x + y * t.stride,
+    AddrMode::ColMayor => x * t.stride + y
+};
+
+fn @sub_tensor(t : Matrix, x0 : i32, y0 : i32, xs : i32, ys : i32) =
+    Matrix {data = bitcast [&mut [f16]](&t.data(addr_tensor(x0, y0, t))),
+             x_dim = xs,
+             y_dim = ys,
+             addr_mode = t.addr_mode,
+             stride = t.stride
+             };
+
+fn @nvvm_wmma_expand (a_fragment : (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]),
+        b_fragment : (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]),
+        c_fragment : (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]),
+        a_mode : AddrMode,
+        b_mode : AddrMode,
+        ) {
+    let (a1, a2, a3, a4, a5, a6, a7, a8) = a_fragment;
+    let (b1, b2, b3, b4, b5, b6, b7, b8) = b_fragment;
+    let (c1, c2, c3, c4) = c_fragment;
+
+    match (a_mode, b_mode) {
+        (AddrMode::RowMayor, AddrMode::RowMayor) =>
+            nvvm_wmma_row_row(a1, a2, a3, a4, a5, a6, a7, a8, b1, b2, b3, b4, b5, b6, b7, b8, c1, c2, c3, c4),
+        (AddrMode::ColMayor, AddrMode::RowMayor) =>
+            nvvm_wmma_col_row(a1, a2, a3, a4, a5, a6, a7, a8, b1, b2, b3, b4, b5, b6, b7, b8, c1, c2, c3, c4),
+        (AddrMode::RowMayor, AddrMode::ColMayor) =>
+            nvvm_wmma_row_col(a1, a2, a3, a4, a5, a6, a7, a8, b1, b2, b3, b4, b5, b6, b7, b8, c1, c2, c3, c4),
+        (AddrMode::ColMayor, AddrMode::ColMayor) =>
+            nvvm_wmma_col_col(a1, a2, a3, a4, a5, a6, a7, a8, b1, b2, b3, b4, b5, b6, b7, b8, c1, c2, c3, c4)
+    }
+}
+
+fn @nvvm_load_a_expand(fragment_tensor : Matrix) {
+    let cuda_data = bitcast[&i8](fragment_tensor.data);
+
+    match fragment_tensor.addr_mode {
+        AddrMode::RowMayor =>
+            if (fragment_tensor.stride > 16) {
+                nvvm_load_a_row_stride(cuda_data, fragment_tensor.stride)
+            } else {
+                nvvm_load_a_row(cuda_data)
+            },
+        AddrMode::ColMayor =>
+            if (fragment_tensor.stride > 16) {
+                nvvm_load_a_col_stride(cuda_data, fragment_tensor.stride)
+            } else {
+                nvvm_load_a_col(cuda_data)
+            }
+    }
+}
+
+fn @nvvm_load_b_expand(fragment_tensor : Matrix) {
+    let cuda_data = bitcast[&i8](fragment_tensor.data);
+
+    match fragment_tensor.addr_mode {
+        AddrMode::RowMayor =>
+            if (fragment_tensor.stride > 16) {
+                nvvm_load_b_row_stride(cuda_data, fragment_tensor.stride)
+            } else {
+                nvvm_load_b_row(cuda_data)
+            },
+        AddrMode::ColMayor =>
+            if (fragment_tensor.stride > 16) {
+                nvvm_load_b_col_stride(cuda_data, fragment_tensor.stride)
+            } else {
+                nvvm_load_b_col(cuda_data)
+            }
+    }
+}
+
+fn @nvvm_load_c_expand(fragment_tensor : Matrix) {
+    let cuda_data = bitcast[&i8](fragment_tensor.data);
+
+    match fragment_tensor.addr_mode {
+        AddrMode::RowMayor =>
+            if (fragment_tensor.stride > 16) {
+                nvvm_load_c_row_stride(cuda_data, fragment_tensor.stride)
+            } else {
+                nvvm_load_c_row(cuda_data)
+            },
+        AddrMode::ColMayor =>
+            if (fragment_tensor.stride > 16) {
+                nvvm_load_c_col_stride(cuda_data, fragment_tensor.stride)
+            } else {
+                nvvm_load_c_col(cuda_data)
+            }
+    }
+}
+
+fn @nvvm_store_d_expand (d_fragment_tensor : Matrix, acc_fragment : (simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2])) {
+    let d_cuda = bitcast[&mut i8](d_fragment_tensor.data);
+    let (acc1, acc2, acc3, acc4) = acc_fragment;
+
+    match d_fragment_tensor.addr_mode {
+        AddrMode::RowMayor =>
+            if (d_fragment_tensor.stride > 16) {
+                nvvm_store_d_row_stride(d_cuda, acc1, acc2, acc3, acc4, d_fragment_tensor.stride)
+            } else {
+                nvvm_store_d_row(d_cuda, acc1, acc2, acc3, acc4)
+            },
+        AddrMode::ColMayor =>
+            if (d_fragment_tensor.stride > 16) {
+                nvvm_store_d_col_stride(d_cuda, acc1, acc2, acc3, acc4, d_fragment_tensor.stride)
+            } else {
+                nvvm_store_d_col(d_cuda, acc1, acc2, acc3, acc4)
+            }
+    }
+}
+
+
+fn matrix_multiply_nvvm_blocked (nvvm : Accelerator, a : Matrix, b : Matrix, c : Matrix, d : Matrix) -> () {
+    let m = a.y_dim;
+    let n = b.x_dim;
+    //assert(a.x_dim == b.y_dim);
+    let k = a.x_dim;
+
+    let chunk_size_x = 16;
+    let chunk_size_y = 16;
+    let chunk_size_k = 16;
+
+    //Each block will calculated x * y many chunks.
+    let block_chunks_x = 8;
+    let block_chunks_y = 8;
+
+    let shared_chunks_k = 4;
+
+    //Each warp will be used to calcuate this geometry of chunks.
+    let warp_x_chunks = 4;
+    let warp_y_chunks = 2;
+
+    //Each block consists of this many warps.
+    let x_warps_per_block = block_chunks_x / warp_x_chunks;
+    let y_warps_per_block = block_chunks_y / warp_y_chunks;
+
+    let num_x_warps = n / chunk_size_x / warp_x_chunks;
+    let num_y_warps = m / chunk_size_y / warp_y_chunks;
+
+    let matrix_x_blocks = num_x_warps / x_warps_per_block;
+    let matrix_y_blocks = num_y_warps / y_warps_per_block;
+
+    let max_x_blocks = 4;
+    let max_y_blocks = 4;
+
+    let x_blocks = select(matrix_x_blocks < max_x_blocks, matrix_x_blocks, max_x_blocks);
+    let y_blocks = select(matrix_y_blocks < max_y_blocks, matrix_y_blocks, max_y_blocks);
+
+    let x_iterations_per_group = matrix_x_blocks / x_blocks;
+    let y_iterations_per_group = matrix_y_blocks / y_blocks;
+
+    let block_x_threads = x_warps_per_block * warp_size;
+    let block_y_threads = y_warps_per_block;
+
+    let x_threads = x_blocks * block_x_threads;
+    let y_threads = y_blocks * block_y_threads;
+
+    let skew_half = 16; //Not sure how this impacts performance; investigate.
+    //let skew_half = 0; //Not sure how this impacts performance; investigate.
+
+    let warp_shared_storage = (chunk_size_x * warp_x_chunks + skew_half) * (chunk_size_y * warp_y_chunks);
+    let total_shared_storage = x_warps_per_block * y_warps_per_block * warp_shared_storage;
+
+    print_string("configuration: (");
+    print_i32(x_threads);
+    print_string(", ");
+    print_i32(y_threads);
+    print_string(") iterations (");
+    print_i32(x_iterations_per_group);
+    print_string(", ");
+    print_i32(y_iterations_per_group);
+    print_string(") block size (");
+    print_i32(block_x_threads);
+    print_string(", ");
+    print_i32(block_y_threads);
+    print_string(") requires ");
+    print_i32(total_shared_storage * sizeof[f16]() as i32 / 1024);
+    print_string("kB of shared mem per block (");
+    print_i32(total_shared_storage * x_blocks * y_blocks * sizeof[f16]() as i32 / 1024);
+    print_string("kB total)\n");
+
+    for work_item in nvvm.exec((x_threads, y_threads,  1), (block_x_threads, block_y_threads, 1)) {
+        for iteration_x in range(0, x_iterations_per_group) {
+            for iteration_y in range(0, x_iterations_per_group) {
+                /* (warp_x, warp_y) -> Base address in C/D for the current warp. */
+                let warp_x = work_item.gidx() / warp_size * warp_x_chunks * chunk_size_x + iteration_x * max_x_blocks * chunk_size_x * block_chunks_x;
+                let warp_y = work_item.gidy() * warp_y_chunks * chunk_size_y + iteration_y * max_y_blocks * chunk_size_y * block_chunks_y;
+
+                //let block_x = (warp_x / (block_chunks_x * chunk_size_x)) * (block_chunks_x * chunk_size_x);
+                //let block_y = (warp_y / (block_chunks_y * chunk_size_y)) * (block_chunks_y * chunk_size_y);
+
+                let warp_id = nvvm_warpid() as i32;
+                let lane_id = nvvm_laneid() as i32;
+                let shared_memory = bitcast[&mut [f16]](reserve_shared[f16](total_shared_storage));
+                let shared_chunk = bitcast[&mut[f16]](&shared_memory(warp_id * warp_shared_storage));
+                //TODO: This geometry might be sub-optimal due to the relatively large stride.
+                let warp_shared_tensor = Matrix { data = shared_chunk, x_dim = chunk_size_x * warp_x_chunks, y_dim = chunk_size_y * warp_y_chunks, addr_mode = AddrMode::RowMayor, stride = chunk_size_x * warp_x_chunks };
+
+                //Copy "our" chunk of C to shared memory.
+                for x in range_step(0, warp_x_chunks * chunk_size_x, warp_size) {
+                    for local_y in range(0, warp_y_chunks * chunk_size_y) {
+                        let local_x = x + lane_id;
+                        let global_x = warp_x + local_x;
+                        let global_y = warp_y + local_y;
+
+                        warp_shared_tensor.data(addr_tensor(local_x, local_y, warp_shared_tensor)) = c.data(addr_tensor(global_x, global_y, c));
+                    }
+                }
+
+                nvvm.barrier();
+
+                //TODO: this depends on the current layout!
+                let mut acc_fragments : [[(simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]) * 2] * 4];
+
+                /* Load C fragments into registers */
+                for chunk_x in range(0, warp_x_chunks) {
+                    for chunk_y in range(0, warp_y_chunks) {
+                        let shared_fragment_tensor = sub_tensor(warp_shared_tensor, chunk_x * chunk_size_x, chunk_y * chunk_size_y, chunk_size_x, chunk_size_y);
+                        let shared_fragment = nvvm_load_c_expand(shared_fragment_tensor);
+
+                        acc_fragments(chunk_x)(chunk_y) = shared_fragment;
+                    }
+                }
+
+                nvvm.barrier();
+
+                //let shared_A_chunk = shared_memory;
+                //let shared_B_chunk = bitcast[&mut[f16]](&shared_memory(total_shared_storage / 2));
+
+                //let shared_A_tensor = Matrix { data = shared_A_chunk, x_dim = chunk_size_k * shared_chunks_k, y_dim = chunk_size_y * block_chunks_y, addr_mode = AddrMode::RowMayor, stride = (chunk_size_k * shared_chunks_k) + skew_half };
+                //let shared_B_tensor = Matrix { data = shared_B_chunk, x_dim = chunk_size_y * block_chunks_y, y_dim = chunk_size_k, addr_mode = AddrMode::ColMayor, stride = (chunk_size_k * shared_chunks_k) + skew_half };
+
+                //for global_k in range_step(0, k, chunk_size_k) {
+                for outer_k in unroll_step(0, k, chunk_size_k * shared_chunks_k) {
+                    /* Load A & B fragments to shared memory */
+                    //let a_outer = sub_tensor(a, outer_k, warp_y, chunk_size_k * shared_chunks_k, chunk_size_y * block_chunks_y);
+                    //let b_outer = sub_tensor(a, warp_x, outer_k, chunk_size_x * block_chunks_x, chunk_size_k * shared_chunks_k);
+
+                    /*for chunk_y in range_step(0, chunk_size_y * block_chunks_y, chunk_size_k / shared_chunks_k) {
+                        let local_id = warp_id * warp_size + lane_id; //0 - 255, unique on each thread in the active block.
+
+                        let local_k = local_id % (chunk_size_k * shared_chunks_k);
+                        let local_y = chunk_y + local_id / (chunk_size_k * shared_chunks_k);
+
+                        let global_y = block_y + local_y;
+                        let global_k = outer_k + local_k;
+
+                        shared_A_tensor.data(addr_tensor(local_k, local_y, shared_A_tensor)) = a.data(addr_tensor(global_k, global_y, a));
+                    }*/
+
+                    nvvm.barrier();
+
+                    for inner_k in range(0, shared_chunks_k) {
+                        let global_k = outer_k + (inner_k * chunk_size_k);
+
+                        /*let mut a_fragments : [(simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]) * 2];
+
+                        for chunk_y in range(0, warp_y_chunks) {
+                            let local_y = chunk_y * chunk_size_y;
+                            let global_y = warp_y + local_y;
+
+                            //let a_fragment_tensor = sub_tensor(a, global_k, global_y, chunk_size_k, chunk_size_y);
+                            let a_fragment_tensor = sub_tensor(shared_A_tensor, inner_k * chunk_size_k, global_y - block_y, chunk_size_k, chunk_size_y);
+                            a_fragments(chunk_y) = nvvm_load_a_expand(a_fragment_tensor);
+                        }*/
+
+                        for chunk_x in range(0, warp_x_chunks) {
+                            let local_x = chunk_x * chunk_size_x;
+                            let global_x = warp_x + local_x;
+
+                            let b_fragment_tensor = sub_tensor(b, global_x, global_k, chunk_size_x, chunk_size_k);
+                            let b_fragment = nvvm_load_b_expand(b_fragment_tensor);
+
+                            for chunk_y in range(0, warp_y_chunks) {
+                                let acc_fragment = acc_fragments(chunk_x)(chunk_y);
+
+                                let local_y = chunk_y * chunk_size_y;
+                                let global_y = warp_y + local_y;
+
+                                let a_fragment_tensor = sub_tensor(a, global_k, global_y, chunk_size_k, chunk_size_y);
+                                //let a_fragment_tensor = sub_tensor(shared_A_tensor, inner_k * chunk_size_k, global_y - block_y, chunk_size_k, chunk_size_y);
+                                let a_fragment = nvvm_load_a_expand(a_fragment_tensor);
+                                //let a_fragment = a_fragments(chunk_y);
+
+                                let result_fragment = nvvm_wmma_expand (a_fragment, b_fragment, acc_fragment, a_fragment_tensor.addr_mode, b_fragment_tensor.addr_mode);
+
+                                acc_fragments(chunk_x)(chunk_y) = result_fragment;
+                            }
+                        }
+                    }
+
+                    nvvm.barrier();
+                }
+
+                /* Store result fragments back into registers */
+                for chunk_x in range(0, warp_x_chunks) {
+                    for chunk_y in range(0, warp_y_chunks) {
+                        let shared_fragment_tensor = sub_tensor(warp_shared_tensor, chunk_x * chunk_size_x, chunk_y * chunk_size_y, chunk_size_x, chunk_size_y);
+
+                        let result_fragment = acc_fragments(chunk_x)(chunk_y);
+                        nvvm_store_d_expand (shared_fragment_tensor, result_fragment);
+                    }
+                }
+
+                nvvm.barrier();
+
+                //Return "our" chunk of D to global memory.
+                for x in range_step(0, warp_x_chunks * chunk_size_x, warp_size) {
+                    for y in range(0, warp_y_chunks * chunk_size_y) {
+                        let x_global = warp_x + x + lane_id;
+                        let y_global = warp_y + y;
+
+                        d.data(addr_tensor(x_global, y_global, c)) = warp_shared_tensor.data(addr_tensor(x + lane_id, y, warp_shared_tensor));
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+fn matrix_multiply_nvvm_tiled (nvvm : Accelerator, a : Matrix, b : Matrix, c : Matrix, d : Matrix) -> () {
+    let m = a.y_dim;
+    let n = b.x_dim;
+    //assert(a.x_dim == b.y_dim);
+    let k = a.x_dim;
+
+    let chunk_size_x = 16;
+    let chunk_size_y = 16;
+    let chunk_size_k = 16;
+
+    //Each block will calculated x * y many chunks.
+    let block_chunks_x = 8;
+    let block_chunks_y = 8;
+
+    //Each warp will be used to calcuate this geometry of chunks.
+    let warp_x_chunks = 2;
+    let warp_y_chunks = 4;
+
+    //Each block consists of this many warps.
+    let x_warps_per_block = block_chunks_x / warp_x_chunks;
+    let y_warps_per_block = block_chunks_y / warp_y_chunks;
+
+    let num_x_warps = n / chunk_size_x / warp_x_chunks;
+    let num_y_warps = m / chunk_size_y / warp_y_chunks;
+
+    let matrix_x_blocks = num_x_warps / x_warps_per_block;
+    let matrix_y_blocks = num_y_warps / y_warps_per_block;
+
+    let block_x_threads = x_warps_per_block * warp_size;
+    let block_y_threads = y_warps_per_block;
+
+    let x_threads = matrix_x_blocks * block_x_threads;
+    let y_threads = matrix_y_blocks * block_y_threads;
+
+    print_string("tiled configuration: (");
+    print_i32(x_threads);
+    print_string(", ");
+    print_i32(y_threads);
+    print_string(") block size (");
+    print_i32(block_x_threads);
+    print_string(", ");
+    print_i32(block_y_threads);
+    print_string(")\n");
+
+    for work_item in nvvm.exec((x_threads, y_threads,  1), (block_x_threads, block_y_threads, 1)) {
+        let warp_x = work_item.gidx() / warp_size * warp_x_chunks * chunk_size_x;
+        let warp_y = work_item.gidy() * warp_y_chunks * chunk_size_y;
+
+        //TODO: this depends on the current layout!
+        let mut acc_fragments : [[(simd[f16 * 2], simd[f16 * 2], simd[f16 * 2], simd[f16 * 2]) * 4] * 2];
+
+        /* Load C fragments into registers */
+        for chunk_x in range(0, warp_x_chunks) {
+            for chunk_y in range(0, warp_y_chunks) {
+                let local_x = chunk_x * chunk_size_x;
+                let local_y = chunk_y * chunk_size_y;
+
+                let global_x = warp_x + local_x;
+                let global_y = warp_y + local_y;
+
+                let c_fragment_tensor = sub_tensor(c, global_x, global_y, chunk_size_x, chunk_size_y);
+                let c_fragment = nvvm_load_c_expand(c_fragment_tensor);
+
+                acc_fragments(chunk_x)(chunk_y) = c_fragment;
+            }
+        }
+
+        for global_k in range_step(0, k, chunk_size_k) {
+            for chunk_x in range(0, warp_x_chunks) {
+                let local_x = chunk_x * chunk_size_x;
+                let global_x = warp_x + local_x;
+
+                let b_fragment_tensor = sub_tensor(b, global_x, global_k, chunk_size_x, chunk_size_k);
+                let b_fragment = nvvm_load_b_expand(b_fragment_tensor);
+
+                for chunk_y in range(0, warp_y_chunks) {
+                    let local_y = chunk_y * chunk_size_y;
+                    let global_y = warp_y + local_y;
+
+                    let acc_fragment = acc_fragments(chunk_x)(chunk_y);
+
+                    let a_fragment_tensor = sub_tensor(a, global_k, global_y, chunk_size_k, chunk_size_y);
+                    let a_fragment = nvvm_load_a_expand(a_fragment_tensor);
+
+                    let result_fragment = nvvm_wmma_expand (a_fragment, b_fragment, acc_fragment, a_fragment_tensor.addr_mode, b_fragment_tensor.addr_mode);
+
+                    acc_fragments(chunk_x)(chunk_y) = result_fragment;
+                }
+            }
+        }
+
+        for chunk_x in range(0, warp_x_chunks) {
+            for chunk_y in range(0, warp_y_chunks) {
+                let local_x = chunk_x * chunk_size_x;
+                let local_y = chunk_y * chunk_size_y;
+
+                let global_x = warp_x + local_x;
+                let global_y = warp_y + local_y;
+
+                let result_fragment = acc_fragments(chunk_x)(chunk_y);
+
+                let d_fragment_tensor = sub_tensor(d, global_x, global_y, chunk_size_x, chunk_size_y);
+
+                nvvm_store_d_expand (d_fragment_tensor, result_fragment)
+            }
+        }
+    }
+}
+
+
+fn matrix_multiply_nvvm (nvvm : Accelerator, a : Matrix, b : Matrix, c : Matrix, d : Matrix) -> () {
+    let m = a.y_dim;
+    let n = b.x_dim;
+    //assert(a.x_dim == b.y_dim);
+    let k = a.x_dim;
+
+    let chunk_size_x = 16;
+    let chunk_size_y = 16;
+    let chunk_size_k = 16;
+
+    let block_factor_x = select(n % (chunk_size_x * 2) != 0, 1, select(n % (chunk_size_x * 4) != 0, 2, 4));
+    let block_factor_y = select(m % (chunk_size_y * 2) != 0, 1, select(m % (chunk_size_y * 4) != 0, 2, 4));
+
+    let x_threads = n * warp_size / chunk_size_x;
+    let y_threads = m / chunk_size_y;
+
+    let block_x_threads = warp_size * block_factor_x;
+    let block_y_threads = block_factor_y;
+
+    print_string("simple configuration: (");
+    print_i32(x_threads);
+    print_string(", ");
+    print_i32(y_threads);
+    print_string(") block size (");
+    print_i32(block_x_threads);
+    print_string(", ");
+    print_i32(block_y_threads);
+    print_string(")\n");
+
+    for work_item in nvvm.exec((x_threads, y_threads,  1), (block_x_threads, block_y_threads, 1)) {
+        let chunk_x = work_item.gidx() / warp_size * chunk_size_x;
+        let chunk_y = work_item.gidy() * chunk_size_y;
+
+        let c_fragment_tensor = sub_tensor(c, chunk_x, chunk_y, chunk_size_x, chunk_size_y);
+        let mut acc_fragment = nvvm_load_c_expand(c_fragment_tensor);
+
+        for global_k in range_step(0, k, chunk_size_k) {
+            let a_fragment_tensor = sub_tensor(a, global_k, chunk_y, chunk_size_k, chunk_size_y);
+            let b_fragment_tensor = sub_tensor(b, chunk_x, global_k, chunk_size_x, chunk_size_k);
+
+            let a_fragment = nvvm_load_a_expand(a_fragment_tensor);
+            let b_fragment = nvvm_load_b_expand(b_fragment_tensor);
+
+            acc_fragment = nvvm_wmma_expand (a_fragment, b_fragment, acc_fragment, a_fragment_tensor.addr_mode, b_fragment_tensor.addr_mode);
+        }
+
+        let d_fragment_tensor = sub_tensor(d, chunk_x, chunk_y, chunk_size_x, chunk_size_y);
+        nvvm_store_d_expand (d_fragment_tensor, acc_fragment)
+    }
+}
