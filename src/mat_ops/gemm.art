@@ -1,0 +1,36 @@
+fn @matrix_gemm_setup(output_size: &[i64]) -> Tensor[f32] {
+    fn @output_size_fn (n : i32) -> i64 { output_size(n) };
+
+    let output = @alloc_tensor[f32] (2, output_size_fn);
+
+    output
+}
+
+fn @matrix_gemm_impl (A: Tensor[f32], B: Tensor[f32], C: Tensor[f32], output_size: &[i64], output: Tensor[f32]) -> Tensor[f32] {
+    for out_target in multi_loop(output.num_dims, output_size) {
+        let mut sum = *C.access_fn(out_target.index);
+
+        for k in range(0, A.size_fn(1) as i32) { //TODO: not sure if dim 1 or dim 2.
+            let a = *A.access_fn([out_target.index(0), k as i64]);
+            let b = *B.access_fn([k as i64, out_target.index(1)]);
+
+            sum += a * b;
+        }
+
+        *output.access_fn(out_target.index) = sum;
+    }
+
+    output
+}
+
+
+#[intern]
+fn @matrix_gemm_f32 (A: Tensor[f32], B: Tensor[f32], C: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
+    let setup = matrix_gemm_setup(output_size);
+
+    let output = matrix_gemm_impl(A, B, C, output_size, setup);
+
+    print_tensor("Gemm", output);
+
+    output
+}

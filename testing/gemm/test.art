@@ -1,0 +1,18 @@
+#[intern] fn @load_A() -> Tensor[f32];
+#[intern] fn @load_B() -> Tensor[f32];
+#[intern] fn @load_C() -> Tensor[f32];
+
+#[export]
+fn main() -> () {
+    let tensor_A_f32 = load_A();
+    let tensor_B_f32 = load_B();
+    let tensor_C_f32 = load_C();
+
+    print_tensor("A", tensor_A_f32);
+    print_tensor("B", tensor_B_f32);
+    print_tensor("C", tensor_C_f32);
+
+    let tensor_D_f32 = matrix_gemm_f32(tensor_A_f32, tensor_B_f32, tensor_C_f32, [8 : i64, 6 : i64]);
+
+    write_idx_float("result.idx", 2, [8, 6], tensor_D_f32.buffer);
+}
