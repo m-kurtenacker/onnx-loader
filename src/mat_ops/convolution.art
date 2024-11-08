@@ -1,6 +1,7 @@
 //#[export] static mut time_conv : i64;
 
-fn @matrix_convolution_padded_intern (input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], output: Tensor[f32], kernel_shape: &[i64], stride: &[i64], padding: &[i64]) -> () {
+#[intern]
+fn @matrix_convolution_padded_impl (input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], output_size: &[i64], kernel_shape: &[i64], stride: &[i64], padding: &[i64], output: Tensor[f32]) -> Tensor[f32] {
     //let start = get_micro_time();
 
     let num_out_chan = output.size_fn(1) as i32;
@@ -52,6 +53,13 @@ fn @matrix_convolution_padded_intern (input: Tensor[f32], weight: Tensor[f32], b
     //}
 
     //time_conv += get_micro_time() - start;
+    output
+}
+
+#[intern]
+fn @matrix_convolution_padded_setup (output_size: &[i64], _kernel_shape: &[i64], _stride: &[i64], _padding: &[i64]) -> Tensor[f32] {
+    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
+    @alloc_tensor[f32](4, output_size_fn)
 }
 
 #[intern]
@@ -71,10 +79,9 @@ fn @matrix_convolution_padded (input: Tensor[f32], weight: Tensor[f32], bias: Te
     print_tensor("Conv weight", weight);
     print_tensor("Conv bias", bias);
 
-    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
-    let output = @alloc_tensor[f32](4, output_size_fn);
+    let setup = @matrix_convolution_padded_setup(output_size, kernel_shape, stride, padding);
 
-    matrix_convolution_padded_intern(input, weight, bias, output, kernel_shape, stride, padding);
+    let output = @matrix_convolution_padded_impl(input, weight, bias, output_size, kernel_shape, stride, padding, setup);
 
     print_tensor("Conv", output);
 

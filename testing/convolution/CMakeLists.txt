@@ -20,7 +20,7 @@ add_custom_command(
 
 anydsl_runtime_wrap(CONV_NETWORK_WITHTOOLS_JSON
     FRONTEND "anyopt"
-    ANYOPT_FLAGS --pass cleanup_fix_point --keep-intern run_network
+    ANYOPT_FLAGS --pass cleanup_fix_point --keep-intern setup_network
     EMIT_JSON
     NAME "network_withtools"
     FILES ${CMAKE_CURRENT_BINARY_DIR}/network.thorin.json ${NET_TOOLS_JSON}
@@ -46,7 +46,7 @@ anydsl_runtime_wrap(TEST_CONV_MAIN_JSON
 
 anydsl_runtime_wrap(TEST_CONV_MAIN_INT
     FRONTEND "anyopt"
-    ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup --keep-intern run_network
+    ANYOPT_FLAGS --pass cleanup --pass lower2cff --pass cleanup --keep-intern setup_network
     EMIT_JSON
     NAME "test-compiled"
     FILES ${TEST_CONV_MAIN_JSON}

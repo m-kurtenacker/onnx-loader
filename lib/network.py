@@ -133,7 +133,8 @@ def translate_operation(onnx_node):
     elif onnx_node.op_type == "Softmax" or "softmax" in onnx_node.op_type:
         return mat_softmax
     elif onnx_node.op_type == "Conv" or "conv" in onnx_node.op_type:
-        return mat_conv
+        print("This should hit a special case in build_node.")
+        assert(False)
     elif onnx_node.op_type == "MaxPool" or "max_pool" in onnx_node.op_type:
         return mat_max_pool
     elif onnx_node.op_type == "Transpose":
@@ -153,6 +154,15 @@ def translate_operation(onnx_node):
 
 
 def build_node(onnx_node):
+    #Used to gather additional attributes that might be needed, e.g. padding
+    def get_attributes(*args):
+        results = [None for _ in range(0, len(args))]
+        for attribute in onnx_node.attribute:
+            for index, arg in zip(range(0, len(args)), args):
+                if attribute.name == arg:
+                    results[index] = attribute.ints
+        return results
+
     #Gather the output shape for all nodes.
     output_shape = []
     if onnx_node.output[0] == output_name:
@@ -175,15 +185,6 @@ def build_node(onnx_node):
     if output_shape == []:
         print("Node has no output shape?:", onnx_node)
     assert(output_shape != [])
-
-    #Used to gather additional attributes that might be needed, e.g. padding
-    def get_attributes(*args):
-        results = [None for _ in range(0, len(args))]
-        for attribute in onnx_node.attribute:
-            for index, arg in zip(range(0, len(args)), args):
-                if attribute.name == arg:
-                    results[index] = attribute.ints
-        return results
 
     if onnx_node.op_type == "Constant":
         if onnx_node.attribute[0].t.data_type == 6: #i32
@@ -211,7 +212,8 @@ def build_node(onnx_node):
 
             update_node = {"result": result_tuple, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
             nodes.update({onnx_node.output[0] : update_node})
-            return onnx_node.output[0]
+
+        return onnx_node.output[0], None
 
     elif onnx_node.op_type == "Transpose":
         perm, = get_attributes("perm")
@@ -230,7 +232,8 @@ def build_node(onnx_node):
 
             update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
             nodes.update({onnx_node.output[0] : update_node})
-            return onnx_node.output[0]
+
+        return onnx_node.output[0], None
 
     elif onnx_node.op_type == "Conv" or "conv" in onnx_node.op_type or onnx_node.op_type == "MaxPool" or "max_pool" in onnx_node.op_type or onnx_node.op_type == "AveragePool":
         shape, strides, padding = get_attributes("kernel_shape", "strides", "pads")
@@ -242,16 +245,21 @@ def build_node(onnx_node):
 
         attributes = [output_shape_global, shape_global, stride_global, padding_global]
 
-        thorin_operation = translate_operation(onnx_node)
-        return_fn_type = thorin_operation.type.args[-1]
+        with ThorinContinuation(mat_conv_setup.type.args[-1]) as (setup_cont, setup_mem, setup_result):
+            call_function = lambda in_cont, in_mem: in_cont(mat_conv_setup, in_mem, *attributes, setup_cont)
+            return_function = lambda out_cont, *out_param: setup_cont(out_cont, setup_mem, *out_param)
 
-        with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
-            call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
-            return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
+            update_node = {"result": setup_result, "call": call_function, "cont": return_function, "block": (setup_cont, setup_mem), "onnx_node": onnx_node}
+            nodes.update({onnx_node.output[0] + "_setup" : update_node})
 
-            update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
+        with ThorinContinuation(mat_conv_exec.type.args[-1]) as (exec_cont, exec_mem, result_tensor):
+            call_function = lambda in_cont, in_mem: in_cont(mat_conv_exec, in_mem, *[nodes[name]["result"] for name in onnx_node.input], *attributes, setup_result, exec_cont)
+            return_function = lambda out_cont, *out_param: exec_cont(out_cont, exec_mem, *out_param)
+
+            update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (exec_cont, exec_mem), "onnx_node": onnx_node}
             nodes.update({onnx_node.output[0] : update_node})
-            return onnx_node.output[0]
+
+        return onnx_node.output[0], (onnx_node.output[0] + "_setup")
 
     else:
         thorin_operation = translate_operation(onnx_node)
@@ -267,7 +275,8 @@ def build_node(onnx_node):
 
             update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
             nodes.update({onnx_node.output[0] : update_node})
-            return onnx_node.output[0]
+
+        return onnx_node.output[0], None
 
 
 with Thorin("network") as network:
@@ -282,7 +291,9 @@ with Thorin("network") as network:
     mat_add = network.find_imported_def("matrix_add")
     mat_reshape = network.find_imported_def("matrix_reshape_f32")
     mat_reshape_const = network.find_imported_def("matrix_reshape_const_f32")
-    mat_conv = network.find_imported_def("matrix_convolution_padded")
+
+    mat_conv_exec = network.find_imported_def("matrix_convolution_padded_impl")
+    mat_conv_setup = network.find_imported_def("matrix_convolution_padded_setup")
 
     #mat_flatten = network.find_imported_def("matrix_flatten_f32")
     #mat_relu = network.find_imported_def("matrix_relu")
@@ -303,46 +314,63 @@ with Thorin("network") as network:
     tensor_i64_type = tensor_i64_return_type.args[1]
 
     network_exec_type = ThorinFnType([mem_type, tensor_type], tensor_type)
+    setup_exec_type = ThorinFnType([mem_type], network_exec_type);
 
-    with ThorinContinuation(network_exec_type, internal="run_network", thorin=network) as (run_network, run_network_mem, run_image, ret_function):
-        # Node format: { "result": <whatever this node produces>
-        #                "call": lambda in_cont, in_mem <used when the node is called from somewhere>
-        #                "cont": lambda out_cont, *out_param <used when the node is supposed to call something else>
-        #                "block": (cont, mem) <the last cont and memory of this node, used similar to "cont".
-        #}
-        nodes = {}
+    input_name = graph.input[0].name
+    output_name = graph.output[0].name
 
-        unordered_nodes = []
-        ordered_nodes = []
-        initializer_nodes = []
+    # Node format: { "result": <whatever this node produces>
+    #                "call": lambda in_cont, in_mem <used when the node is called from somewhere>
+    #                "cont": lambda out_cont, *out_param <used when the node is supposed to call something else>
+    #                "block": (cont, mem) <the last cont and memory of this node, used similar to "cont".
+    #}
+    nodes = {}
 
-        input_name = graph.input[0].name
-        output_name = graph.output[0].name
+    unordered_nodes = []
+    ordered_nodes = []
+    initializer_nodes = []
 
-        buildImage_continue, buildImage_mem = ThorinContinuation(return_type).__enter__()
+    def link_nodes(entry, exit):
+        cont, mem = entry["block"]
+        exit["call"](cont, mem)
 
-        nodes[input_name] = {"result": run_image,
-                             "call": lambda in_cont, in_mem: in_cont(buildImage_continue, in_mem),
-                             "cont": lambda out_cont, *out_param: buildImage_continue(out_cont, buildImage_mem, *out_param),
-                             "block": (buildImage_continue, buildImage_mem)}
-
-        ordered_nodes.append(input_name)
-
+    with ThorinContinuation(setup_exec_type, internal="setup_network", thorin=network) as (setup_network, setup_network_mem, setup_ret):
         for initializer in graph.initializer:
-            ordered_nodes.append(load_initializer(initializer))
+            initializer_nodes.append(load_initializer(initializer))
 
-        for node in graph.node:
-            ordered_nodes.append(build_node(node))
+        with ThorinContinuation(network_exec_type) as (run_network, run_network_mem, run_image, ret_function):
+            buildImage_continue, buildImage_mem = ThorinContinuation(return_type).__enter__()
 
-        def link_nodes(entry, exit):
-            cont, mem = entry["block"]
-            exit["call"](cont, mem)
+            nodes[input_name] = {"result": run_image,
+                                 "call": lambda in_cont, in_mem: in_cont(buildImage_continue, in_mem),
+                                 "cont": lambda out_cont, *out_param: buildImage_continue(out_cont, buildImage_mem, *out_param),
+                                 "block": (buildImage_continue, buildImage_mem)}
 
-        for i in range(0, len(ordered_nodes) - 1):
-            link_nodes(nodes[ordered_nodes[i]], nodes[ordered_nodes[i+1]])
+            ordered_nodes.append(input_name)
 
-        #Execute entry
-        nodes[ordered_nodes[0]]["call"](run_network, run_network_mem)
+            for node in graph.node:
+                exec_node, init_node = build_node(node)
+                if exec_node is not None:
+                    ordered_nodes.append(exec_node)
+                if init_node is not None:
+                    initializer_nodes.append(init_node);
 
-        #Execute exit
-        nodes[output_name]["cont"](ret_function, nodes[output_name]["result"])
+            for i in range(0, len(ordered_nodes) - 1):
+                link_nodes(nodes[ordered_nodes[i]], nodes[ordered_nodes[i+1]])
+
+            #Execute entry
+            nodes[ordered_nodes[0]]["call"](run_network, run_network_mem)
+
+            #Execute exit
+            nodes[output_name]["cont"](ret_function, nodes[output_name]["result"])
+
+        for i in range(0, len(initializer_nodes) - 1):
+            link_nodes(nodes[initializer_nodes[i]], nodes[initializer_nodes[i+1]])
+
+        if initializer_nodes == []:
+            setup_network(setup_ret, setup_network_mem, run_network);
+            assert(False);
+        else:
+            nodes[initializer_nodes[0]]["call"](setup_network, setup_network_mem)
+
+            nodes[initializer_nodes[-1]]["cont"](setup_ret, run_network)

@@ -1,7 +1,9 @@
-#[intern] fn @run_network(_input_tensor : Tensor[f32]) -> Tensor[f32];
+#[intern] fn @setup_network() -> (fn(Tensor[f32]) -> Tensor[f32]);
 
 #[export]
 fn main() -> () {
+    let run_network = setup_network();
+
     let data = read_idx("test.idx");
 
     let tensor_input_buffer = data(0);
