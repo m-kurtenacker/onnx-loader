@@ -24,7 +24,7 @@ fn main() -> () {
     print_tensor("input a", tensor_a);
     print_tensor("input b", tensor_b);
 
-    let output_size = [3 as i64, 4 as i64]; //The call above does not produce constants apparently.
+    let output_size = (2, [3: i64, 4: i64]); //The call above does not produce constants apparently.
     let result_tensor = matrix_add(tensor_a, tensor_b, output_size);
 
     print_tensor("result", result_tensor);

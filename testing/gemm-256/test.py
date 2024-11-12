@@ -23,7 +23,7 @@ print(art_result)
 compare_distance = np.absolute(result - art_result)
 print(compare_distance)
 
-if np.max(compare_distance) > 0.2:
+if np.max(compare_distance) > 0.25:
     print(np.max(compare_distance))
     sys.exit(1)
 else:

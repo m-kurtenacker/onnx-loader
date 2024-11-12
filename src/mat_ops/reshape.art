@@ -1,20 +1,20 @@
 static print_reshape = false;
 
-fn @matrix_reshape[T] (mat: Tensor[T], num_output_dims : i32, output_size: &[i64]) -> Tensor[T] {
-    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
+fn @matrix_reshape[T] (mat: Tensor[T], output_size: (i32, &[i64])) -> Tensor[T] {
+    fn @output_size_fn(n : i32) -> i64 { output_size.1(n) }
     let new_access_fn = |n : &[i64]| {
         //Build a "linear" address with regards to the new shape.
         if print_reshape {
             print_string("input addr ");
-            for i in unroll(0, num_output_dims) {
+            for i in unroll(0, output_size.0) {
                 print_i64(n(i));
                 print_string(" ");
             }
             print_string("\n");
         }
         let mut address = n(0);
-        for i in unroll(1, num_output_dims) {
-            address = address * output_size(i) + n(i);
+        for i in unroll(1, output_size.0) {
+            address = address * output_size.1(i) + n(i);
         }
 
         if print_reshape {
@@ -49,7 +49,7 @@ fn @matrix_reshape[T] (mat: Tensor[T], num_output_dims : i32, output_size: &[i64
 
     Tensor[T] {
         buffer = mat.buffer,
-        num_dims = num_output_dims,
+        num_dims = output_size.0,
         addr_mode = AddrMode::RowMayor,
         size_fn = output_size_fn,
         access_fn = new_access_fn
@@ -57,18 +57,18 @@ fn @matrix_reshape[T] (mat: Tensor[T], num_output_dims : i32, output_size: &[i64
 }
 
 #[intern]
-fn @matrix_reshape_const_f32 (mat: Tensor[f32], new_shape: (i32, &[i64]), _output_size: &[i64]) -> Tensor[f32] {
-    let output = @matrix_reshape[f32](mat, new_shape.0, new_shape.1);
+fn @matrix_reshape_const_f32 (mat: Tensor[f32], output_size: (i32, &[i64])) -> Tensor[f32] {
+    let output = @matrix_reshape[f32](mat, output_size);
 
     output
 }
 
 #[intern]
-fn @matrix_reshape_f32 (mat: Tensor[f32], new_shape_tensor: Tensor[i64], output_size: &[i64]) -> Tensor[f32] {
+fn @matrix_reshape_f32 (mat: Tensor[f32], new_shape_tensor: Tensor[i64], output_size: (i32, &[i64])) -> Tensor[f32] {
     print_tensor_i64("new shape", new_shape_tensor);
     print_tensor("reshape input", mat);
 
-    let output = @matrix_reshape[f32](mat, new_shape_tensor.size_fn(0) as i32, output_size);
+    let output = @matrix_reshape[f32](mat, output_size);
 
     print_tensor("reshape output", output);
 

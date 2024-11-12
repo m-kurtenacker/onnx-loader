@@ -1,13 +1,13 @@
 //#[export] static mut time_mul : i64;
 
 #[intern]
-fn @matrix_multiply (input: Tensor[f32], mat: Tensor[f32], output_size: &[i64]) -> Tensor[f32] {
+fn @matrix_multiply (input: Tensor[f32], mat: Tensor[f32], output_size: (i32, &[i64])) -> Tensor[f32] {
     //let start = get_micro_time();
 
-    fn @output_size_fn(n : i32) -> i64 { output_size(n) }
-    let output = @alloc_tensor[f32](1, output_size_fn);
+    fn @output_size_fn(n : i32) -> i64 { output_size.1(n) }
+    let output = @alloc_tensor[f32](output_size.0, output_size_fn);
 
-    for i in range(0, output_size(0) as i32) {
+    for i in range(0, output_size.1(0) as i32) {
         let mut sum = 0 as f32;
         for k in range(0, input.size_fn(0) as i32) {
             sum += (*input.access_fn([k as i64])) * (*mat.access_fn([i as i64, k as i64]))

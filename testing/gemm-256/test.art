@@ -24,7 +24,7 @@ fn main() -> () {
     copy_tensor_f32_f16(tensor_B_f32, tensor_B);
     copy_tensor_f32_f16(tensor_C_f32, tensor_C);
 
-    let output_size = [size, size];
+    let output_size = (2, [size, size]);
 
     let setup = matrix_gemm_accelerated_setup(output_size);
     let output = matrix_gemm_accelerated_impl(tensor_A, tensor_B, tensor_C, output_size, setup);

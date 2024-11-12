@@ -107,7 +107,9 @@ def load_initializer(onnx_node):
 def convert_to_global_array(input_array, thorin_type):
     thorin_array = ThorinDefiniteArray(thorin_type, [ThorinConstant(thorin_type, x) for x in input_array])
     glob = ThorinGlobal(thorin_array)
-    return ThorinBitcast(glob, ThorinPointerType(ThorinIndefiniteArrayType(thorin_type)))
+    glob_cast = ThorinBitcast(glob, ThorinPointerType(ThorinIndefiniteArrayType(thorin_type)))
+    num_dims = ThorinConstant(i32_type, len(input_array))
+    return ThorinTuple([num_dims, glob_cast])
 
 
 def translate_operation(onnx_node):

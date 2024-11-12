@@ -9,7 +9,9 @@ fn main() -> () {
     print_tensor("M", tensor_M);
     print_tensor("t", tensor_t);
 
-    let result_tensor = matrix_multiply(tensor_t, tensor_M, [4 as i64]);
+    let output_size = (1, [4: i64]);
+
+    let result_tensor = matrix_multiply(tensor_t, tensor_M, output_size);
 
     write_idx_float("result.idx", 1, [4], result_tensor.buffer);
 }
