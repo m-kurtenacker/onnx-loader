@@ -1,0 +1,46 @@
+#[intern]
+fn @matrix_im2col_setup(output_size: (i32, &[i64]), _kernel_shape: (i32, &[i64]), _stride: (i32, &[i64]), _padding: (i32, &[i64])) {
+    //let nvvm = nvvm_accelerator(0);
+
+    fn @output_size_fn(n : i32) -> i64 { output_size.1(n) }
+    let output_tensor = @alloc_tensor[f32](output_size.0, output_size_fn);
+
+    //(nvvm, output_tensor)
+    output_tensor
+}
+
+#[intern]
+fn @matrix_im2col_impl(input: Tensor[f32], output_size: (i32, &[i64]), kernel_shape: (i32, &[i64]), _stride: (i32, &[i64]), padding: (i32, &[i64]), output: Tensor[f32]) -> Tensor[f32] {
+    //TODO: fill padding area
+    //let (nvvm, output) = setup;
+
+    for x in range(0, output.size_fn(1) as i32) {
+        for y in range(0, output.size_fn(0) as i32) {
+            *output.access_fn([y as i64, x as i64]) = 0: f32;
+        }
+    }
+
+    for x in range(0, input.size_fn(1) as i32) {
+        for y in range(0, input.size_fn(0) as i32) {
+
+            let value = *input.access_fn([y as i64, x as i64]);
+            print_f32(value * 255);
+            print_string("\n");
+
+            for xk in range(0, kernel_shape.1(1) as i32) {
+                for yk in range(0, kernel_shape.1(0) as i32) {
+                    let output_position = [
+                        (yk * kernel_shape.1(0) as i32 + xk) as i64,
+                        ((y - yk) * kernel_shape.1(0) as i32 + x - xk) as i64
+                    ];
+
+                    if x - xk >= 0 && x - xk < (input.size_fn(1) - kernel_shape.1(1) + 1) as i32 && y - yk >= 0 && y - yk < (input.size_fn(0) - kernel_shape.1(0) + 1) as i32 {
+                        *output.access_fn(output_position) = value;
+                    }
+                }
+            }
+        }
+    }
+
+    output
+}

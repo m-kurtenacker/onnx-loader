@@ -1,0 +1,21 @@
+#[export]
+fn main() -> () {
+    let data = read_idx_byte("test.idx");
+
+    let tensor_a = alloc_tensor_f32(2, @|n : i32| { if n == 0 { 4 } else { 3 } });
+    for y in range(0, 4) {
+        for x in range(0, 3) {
+            *tensor_a.access_fn([y as i64, x as i64]) = ((data.data(y * 3 + x) as i32) as f32);
+        }
+    }
+
+    print_tensor("input a", tensor_a);
+
+    let setup = matrix_im2col_setup((2, [4, 6]), (2, [2, 2]), (2, [1, 1]), (2, [0, 0]));
+
+    let output = matrix_im2col_impl(tensor_a, (2, [4, 6]), (2, [2, 2]), (2, [1, 1]), (2, [0, 0]), setup);
+
+    print_tensor("result", output);
+
+    write_idx_float ("result.idx", 3, [1, 4, 6], output.buffer);
+}
