@@ -1,11 +1,15 @@
 //#[export] static mut time_mul : i64;
 
 #[intern]
-fn @matrix_multiply (input: Tensor[f32], mat: Tensor[f32], output_size: (i32, &[i64])) -> Tensor[f32] {
-    //let start = get_micro_time();
-
+fn @matrix_multiply_setup (output_size: (i32, &[i64])) -> Tensor[f32] {
     fn @output_size_fn(n : i32) -> i64 { output_size.1(n) }
     let output = @alloc_tensor[f32](output_size.0, output_size_fn);
+    output
+}
+
+#[intern]
+fn @matrix_multiply_impl (input: Tensor[f32], mat: Tensor[f32], output_size: (i32, &[i64]), output: Tensor[f32]) -> Tensor[f32] {
+    //let start = get_micro_time();
 
     for i in range(0, output_size.1(0) as i32) {
         let mut sum = 0 as f32;
@@ -16,6 +20,13 @@ fn @matrix_multiply (input: Tensor[f32], mat: Tensor[f32], output_size: (i32, &[
     }
 
     //time_mul += get_micro_time() - start;
+    output
+}
+
+
+fn @matrix_multiply (input: Tensor[f32], mat: Tensor[f32], output_size: (i32, &[i64])) -> Tensor[f32] {
+    let setup = matrix_multiply_setup(output_size);
+    let output = matrix_multiply_impl(input, mat, output_size, setup);
 
     print_tensor("Multiply", output);
 

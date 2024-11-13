@@ -1,3 +1,4 @@
+#[intern]
 fn @matrix_gemm_setup(output_size: (i32, &[i64])) -> Tensor[f32] {
     fn @output_size_fn (n : i32) -> i64 { output_size.1(n) };
 
@@ -6,6 +7,7 @@ fn @matrix_gemm_setup(output_size: (i32, &[i64])) -> Tensor[f32] {
     output
 }
 
+#[intern]
 fn @matrix_gemm_impl (A: Tensor[f32], B: Tensor[f32], C: Tensor[f32], output_size: (i32, &[i64]), output: Tensor[f32]) -> Tensor[f32] {
     for out_target in multi_loop(output_size.0, output_size.1) {
         let mut sum = *C.access_fn(out_target.index);
@@ -24,7 +26,6 @@ fn @matrix_gemm_impl (A: Tensor[f32], B: Tensor[f32], C: Tensor[f32], output_siz
 }
 
 
-#[intern]
 fn @matrix_gemm_f32 (A: Tensor[f32], B: Tensor[f32], C: Tensor[f32], output_size: (i32, &[i64])) -> Tensor[f32] {
     let setup = matrix_gemm_setup(output_size);
 
@@ -36,7 +37,7 @@ fn @matrix_gemm_f32 (A: Tensor[f32], B: Tensor[f32], C: Tensor[f32], output_size
 }
 
 
-
+#[intern]
 fn @matrix_gemm_accelerated_setup (output_size: (i32, &[i64])) {
     let nvvm = nvvm_accelerator(0);
 
@@ -56,6 +57,7 @@ fn @matrix_gemm_accelerated_setup (output_size: (i32, &[i64])) {
     (nvvm, acontainer, bcontainer, ccontainer, dcontainer, output)
 }
 
+#[intern]
 fn @matrix_gemm_accelerated_impl (A: Tensor[f16], B: Tensor[f16], C: Tensor[f16], output_size: (i32, &[i64]), setup: (Accelerator, Buffer, Buffer, Buffer, Buffer, Tensor[f16])) -> Tensor[f16] {
     let (nvvm, acontainer, bcontainer, ccontainer, dcontainer, output) = setup;
 

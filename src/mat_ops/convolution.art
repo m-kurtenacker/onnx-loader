@@ -62,7 +62,7 @@ fn @matrix_convolution_padded_setup (output_size: (i32, &[i64]), _kernel_shape: 
     @alloc_tensor[f32](output_size.0, output_size_fn)
 }
 
-#[intern]
+
 fn @matrix_convolution_padded (input: Tensor[f32], weight: Tensor[f32], bias: Tensor[f32], output_size: (i32, &[i64]), kernel_shape: (i32, &[i64]), stride: (i32, &[i64]), padding: (i32, &[i64])) -> Tensor[f32] {
     /* input shape:  [ batch x in_chan x X x Y ]
        weight shape: [ out_chan x in_chan x Xk x Yk ]

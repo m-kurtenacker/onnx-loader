@@ -8,7 +8,7 @@ fn @matrix_add_setup (output_size: (i32, &[i64])) -> Tensor[f32] {
 }
 
 #[intern]
-fn @matrix_add_impl (matA: Tensor[f32], matB: Tensor[f32], output: Tensor[f32], output_size: (i32, &[i64])) -> () {
+fn @matrix_add_impl (matA: Tensor[f32], matB: Tensor[f32], output_size: (i32, &[i64]), output: Tensor[f32]) -> Tensor[f32] {
     //let start = get_micro_time();
 
     for instance in multi_loop (matA.num_dims, output_size.1) {
@@ -19,13 +19,14 @@ fn @matrix_add_impl (matA: Tensor[f32], matB: Tensor[f32], output: Tensor[f32], 
     }
 
     //time_add += get_micro_time() - start;
+    output
 }
 
-#[intern]
-fn @matrix_add (matA: Tensor[f32], matB: Tensor[f32], output_size: (i32, &[i64])) -> Tensor[f32] {
-    let output = matrix_add_setup(output_size);
 
-    matrix_add_impl (matA, matB, output, output_size);
+fn @matrix_add (matA: Tensor[f32], matB: Tensor[f32], output_size: (i32, &[i64])) -> Tensor[f32] {
+    let setup = matrix_add_setup(output_size);
+
+    let output = matrix_add_impl (matA, matB, output_size, setup);
 
     print_tensor("Addition", output);
 

@@ -115,40 +115,38 @@ def convert_to_global_array(input_array, thorin_type):
 def translate_operation(onnx_node):
     #The functions referenced here are loaded from the network later. Python is awsome sometimes.
     if onnx_node.op_type == "Gemm" or "Linear" in onnx_node.op_type:
-        return mat_gemm
+        return (mat_gemm_impl, mat_gemm_setup)
     elif onnx_node.op_type == "Flatten" or "Flatten" in onnx_node.op_type:
-        return mat_flatten
+        return (mat_flatten, None)
     elif onnx_node.op_type == "Add" or "Add" in onnx_node.op_type:
-        return mat_add
+        return (mat_add_impl, mat_add_setup)
     elif onnx_node.op_type == "Reshape" or "_view" in onnx_node.op_type:
         input_size = nodes[onnx_node.input[1]]["onnx_node"]
         if hasattr(input_size, "op_type") and input_size.op_type == "Constant":
-            return mat_reshape_const
+            return (mat_reshape_const, None)
         else:
-            return mat_reshape
+            return (mat_reshape_impl, mat_reshape_setup)
     elif onnx_node.op_type == "Relu" or "relu" in onnx_node.op_type:
-        return mat_relu
+        return (mat_relu, None)
     elif onnx_node.op_type == "LRN" or "LocalResponseNorm" in onnx_node.op_type:
-        return mat_lrn
+        return (mat_lrn, None)
     elif onnx_node.op_type == "LogSoftmax" or "log_softmax" in onnx_node.op_type:
-        return mat_log_softmax
+        return (mat_log_softmax, None)
     elif onnx_node.op_type == "Softmax" or "softmax" in onnx_node.op_type:
-        return mat_softmax
+        return (mat_softmax, None)
     elif onnx_node.op_type == "Conv" or "conv" in onnx_node.op_type:
         print("This should hit a special case in build_node.")
         assert(False)
     elif onnx_node.op_type == "MaxPool" or "max_pool" in onnx_node.op_type:
-        return mat_max_pool
-    elif onnx_node.op_type == "Transpose":
-        return mat_transpose
+        return (mat_max_pool, None)
     elif onnx_node.op_type == "AveragePool" or "avg_pool" in onnx_node.op_type:
-        return mat_avg_pool
+        return (mat_avg_pool, None)
     elif onnx_node.op_type == "Dropout" or "dropout" in onnx_node.op_type:
-        return mat_dropout
+        return (mat_dropout, None)
     elif onnx_node.op_type == "Concat" or "SequenceConstruct" in onnx_node.op_type:
-        return mat_concat
+        return (mat_concat, None)
     elif "aten_cat" in onnx_node.op_type:
-        return mat_dropout
+        return (mat_dropout, None)
     else:
         print("op unknown:", onnx_node.op_type, "at", onnx_node.name)
         print(onnx_node)
@@ -225,7 +223,7 @@ def build_node(onnx_node):
 
         attributes = [perm_global, output_shape_global]
 
-        thorin_operation = translate_operation(onnx_node)
+        thorin_operation = mat_transpose
         return_fn_type = thorin_operation.type.args[-1]
 
         with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
@@ -264,21 +262,38 @@ def build_node(onnx_node):
         return onnx_node.output[0], (onnx_node.output[0] + "_setup")
 
     else:
-        thorin_operation = translate_operation(onnx_node)
-        return_fn_type = thorin_operation.type.args[-1]
+        (thorin_operation, setup_operation) = translate_operation(onnx_node)
 
         output_shape_global = convert_to_global_array(output_shape, i64_type)
 
         attributes = [output_shape_global]
 
-        with ThorinContinuation(return_fn_type) as (return_cont, return_mem, result_tensor):
-            call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
-            return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
+        if setup_operation is not None:
+            with ThorinContinuation(setup_operation.type.args[-1]) as (setup_cont, setup_mem, setup_result):
+                call_function = lambda in_cont, in_mem: in_cont(setup_operation, in_mem, *attributes, setup_cont)
+                return_function = lambda out_cont, *out_param: setup_cont(out_cont, setup_mem, *out_param)
 
-            update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
-            nodes.update({onnx_node.output[0] : update_node})
+                update_node = {"result": setup_result, "call": call_function, "cont": return_function, "block": (setup_cont, setup_mem), "onnx_node": onnx_node}
+                nodes.update({onnx_node.output[0] + "_setup" : update_node})
 
-        return onnx_node.output[0], None
+            with ThorinContinuation(thorin_operation.type.args[-1]) as (exec_cont, exec_mem, result_tensor):
+                call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, *[nodes[name]["result"] for name in onnx_node.input], *attributes, setup_result, exec_cont)
+                return_function = lambda out_cont, *out_param: exec_cont(out_cont, exec_mem, *out_param)
+
+                update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (exec_cont, exec_mem), "onnx_node": onnx_node}
+                nodes.update({onnx_node.output[0] : update_node})
+
+            return onnx_node.output[0], (onnx_node.output[0] + "_setup")
+
+        else:
+            with ThorinContinuation(thorin_operation.type.args[-1]) as (return_cont, return_mem, result_tensor):
+                call_function = lambda in_cont, in_mem: in_cont(thorin_operation, in_mem, *[nodes[name]["result"] for name in onnx_node.input], *attributes, return_cont)
+                return_function = lambda out_cont, *out_param: return_cont(out_cont, return_mem, *out_param)
+
+                update_node = {"result": result_tensor, "call": call_function, "cont": return_function, "block": (return_cont, return_mem), "onnx_node": onnx_node}
+                nodes.update({onnx_node.output[0] : update_node})
+
+            return onnx_node.output[0], None
 
 
 with Thorin("network") as network:
@@ -289,18 +304,24 @@ with Thorin("network") as network:
     load_matrix_into_f32 = network.find_imported_def("load_matrix_into_f32")
     load_matrix_into_i64 = network.find_imported_def("load_matrix_into_i64")
 
-    mat_mul = network.find_imported_def("matrix_multiply")
-    mat_add = network.find_imported_def("matrix_add")
-    mat_reshape = network.find_imported_def("matrix_reshape_f32")
-    mat_reshape_const = network.find_imported_def("matrix_reshape_const_f32")
+    #mat_reshape = network.find_imported_def("matrix_reshape_f32")
+    #mat_reshape_const = network.find_imported_def("matrix_reshape_const_f32")
 
+    mat_reshape_setup = network.find_imported_def("matrix_reshape_setup")
+    mat_reshape_impl = network.find_imported_def("matrix_reshape_impl")
+
+    mat_mul_setup = network.find_imported_def("matrix_multiply_setup")
+    mat_mul_impl = network.find_imported_def("matrix_multiply_impl")
+    mat_add_setup = network.find_imported_def("matrix_add_setup")
+    mat_add_impl = network.find_imported_def("matrix_add_impl")
     mat_conv_exec = network.find_imported_def("matrix_convolution_padded_impl")
     mat_conv_setup = network.find_imported_def("matrix_convolution_padded_setup")
+    mat_gemm_setup = network.find_imported_def("matrix_gemm_setup")
+    mat_gemm_impl = network.find_imported_def("matrix_gemm_impl")
 
     #mat_flatten = network.find_imported_def("matrix_flatten_f32")
     #mat_relu = network.find_imported_def("matrix_relu")
     #mat_lrn = network.find_imported_def("matrix_lrn_f32")
-    #mat_gemm = network.find_imported_def("matrix_gemm_f32")
     #mat_softmax = network.find_imported_def("matrix_softmax")
     #mat_log_softmax = network.find_imported_def("matrix_log_softmax")
     #mat_max_pool = network.find_imported_def("matrix_max_pool")
