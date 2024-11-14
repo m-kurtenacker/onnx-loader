@@ -1,0 +1,33 @@
+static B = 64 : i64;
+static C = 1 : i64;
+static H = 224 : i64;
+static W = 224 : i64;
+
+#[export]
+fn main() -> () {
+    let data = read_idx_float("test.idx");
+
+    let size_fn = @|n : i32| { match n {
+        0 => B,
+        1 => C,
+        2 => H,
+        3 => W,
+        _ => 0: i64
+    }};
+
+    let tensor_a = build_tensor_f32(data, 4, size_fn);
+
+    print_tensor("input a", tensor_a);
+
+    let output_size = (2, [4: i64, B * C * (H - 1) * (W - 1)]);
+    let kernel_size = (2, [2: i64, 2: i64]);
+    let stride = (2, [1: i64, 1: i64]);
+    let padding = (2, [0: i64, 0: i64]);
+
+    let setup = matrix_im2col_setup(output_size, kernel_size, stride, padding);
+    let output = matrix_im2col_impl(tensor_a, output_size, kernel_size, stride, padding, setup);
+
+    print_tensor("result", output);
+
+    write_idx_float ("result.idx", 2, [4, B * C * (H - 1) * (W - 1)], output.buffer);
+}
