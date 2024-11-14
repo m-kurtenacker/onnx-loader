@@ -5,7 +5,7 @@ fn main() -> () {
     let tensor_a = alloc_tensor_f32(2, @|n : i32| { if n == 0 { 4 } else { 3 } });
     for y in range(0, 4) {
         for x in range(0, 3) {
-            *tensor_a.access_fn([y as i64, x as i64]) = ((data.data(y * 3 + x) as i32) as f32);
+            *tensor_a.access_fn([y as i64, x as i64]) = ((bitcast[&[u8]](data.data)(y * 3 + x) as i32) as f32);
         }
     }
 

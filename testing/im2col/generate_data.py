@@ -1,7 +1,10 @@
 import idx2numpy
 import numpy as np
 
-ndarr = np.array([[[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]]], dtype=np.uint8)
+shape = (1, 4, 3)
+
+ndarr = np.random.random(shape) * 255
+ndarr = np.array(ndarr, dtype=np.uint8)
 
 print(ndarr.shape)
 
