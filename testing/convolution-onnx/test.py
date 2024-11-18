@@ -11,7 +11,7 @@ from onnx.numpy_helper import from_array
 if len(sys.argv) > 1:
     current_source_dir = os.path.dirname(sys.argv[0])
     current_binary_dir = sys.argv[1]
-    subprocess.Popen([os.path.join(current_binary_dir, "test_conv")]).communicate()
+    subprocess.Popen([os.path.join(current_binary_dir, "test_conv_onnx")]).communicate()
 
 a = idx2numpy.convert_from_file("test.idx")
 print(a)

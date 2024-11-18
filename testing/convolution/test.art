@@ -1,9 +1,5 @@
-#[intern] fn @setup_network() -> (fn(Tensor[f32]) -> Tensor[f32]);
-
 #[export]
 fn main() -> () {
-    let run_network = setup_network();
-
     let data = read_idx_scaled("test.idx");
 
     let tensor_input_buffer = data(0);
@@ -13,7 +9,29 @@ fn main() -> () {
     let tensor_input = build_tensor_f32(tensor_input_buffer, 4, @|n : i32| { match n { 0 => 1, 1 => 1, 2 => 4, 3 => 3, _ => 0 }});
     print_tensor_256("input", tensor_input);
 
-    let result_tensor = run_network(tensor_input);
+    let tensor_weight = alloc_tensor_f32(4, @|n: i32| { match n { 0 => 2, 1 => 1, 2 => 2, 3 => 2, _ => 0 }});
+    *tensor_weight.access_fn([0: i64, 0: i64, 0: i64, 0: i64]) = -1 : f32;
+    *tensor_weight.access_fn([0: i64, 0: i64, 0: i64, 1: i64]) =  1 : f32;
+    *tensor_weight.access_fn([0: i64, 0: i64, 1: i64, 0: i64]) = -1 : f32;
+    *tensor_weight.access_fn([0: i64, 0: i64, 1: i64, 1: i64]) =  1 : f32;
+
+    *tensor_weight.access_fn([1: i64, 0: i64, 0: i64, 0: i64]) = -1 : f32;
+    *tensor_weight.access_fn([1: i64, 0: i64, 0: i64, 1: i64]) = -1 : f32;
+    *tensor_weight.access_fn([1: i64, 0: i64, 1: i64, 0: i64]) =  1 : f32;
+    *tensor_weight.access_fn([1: i64, 0: i64, 1: i64, 1: i64]) =  1 : f32;
+    print_tensor("weight", tensor_weight);
+
+    let tensor_bias = alloc_tensor_f32(1, @|n: i32| { match n { 0 => 2, _ => 0 }});
+    *tensor_bias.access_fn([0: i64]) = 0 : f32;
+    *tensor_bias.access_fn([1: i64]) = 0 : f32;
+    print_tensor("bias", tensor_bias);
+
+    let output_size = (4, [1: i64, 2: i64, 3: i64, 2: i64]);
+    let kernel_shape = (2, [2: i64, 2: i64]);
+    let stride = (2, [1: i64, 1: i64]);
+    let padding = (2, [0: i64, 0: i64]);
+
+    let result_tensor = @matrix_convolution_padded(tensor_input, tensor_weight, tensor_bias, output_size, kernel_shape, stride, padding);
 
     print_tensor_256("result", result_tensor);
 

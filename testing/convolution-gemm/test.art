@@ -1,0 +1,69 @@
+#[export]
+fn main() -> () {
+    let data = read_idx_scaled("test.idx");
+
+    let tensor_input_buffer = data(0);
+
+    let mut result_buffer : Buffer;
+
+    let tensor_input = build_tensor_f32(tensor_input_buffer, 4, @|n : i32| { match n { 0 => 1, 1 => 1, 2 => 4, 3 => 3, _ => 0 }});
+    print_tensor_256("input", tensor_input);
+
+    let tensor_weight = alloc_tensor_f32(2, @|n: i32| { match n { 0 => 2, 1 => 4, _ => 0 }});
+    *tensor_weight.access_fn([0: i64, 0: i64]) = -1 : f32;
+    *tensor_weight.access_fn([0: i64, 1: i64]) =  1 : f32;
+    *tensor_weight.access_fn([0: i64, 2: i64]) = -1 : f32;
+    *tensor_weight.access_fn([0: i64, 3: i64]) =  1 : f32;
+    *tensor_weight.access_fn([1: i64, 0: i64]) = -1 : f32;
+    *tensor_weight.access_fn([1: i64, 1: i64]) = -1 : f32;
+    *tensor_weight.access_fn([1: i64, 2: i64]) =  1 : f32;
+    *tensor_weight.access_fn([1: i64, 3: i64]) =  1 : f32;
+
+    let tensor_bias = alloc_tensor_f32(2, @|n: i32| { match n { 0 => 2, 1 => 6, _ => 0 }});
+    *tensor_bias.access_fn([0: i64, 0: i64]) = 0 : f32;
+    *tensor_bias.access_fn([0: i64, 1: i64]) = 0 : f32;
+    *tensor_bias.access_fn([0: i64, 2: i64]) = 0 : f32;
+    *tensor_bias.access_fn([0: i64, 3: i64]) = 0 : f32;
+    *tensor_bias.access_fn([0: i64, 4: i64]) = 0 : f32;
+    *tensor_bias.access_fn([0: i64, 5: i64]) = 0 : f32;
+    *tensor_bias.access_fn([1: i64, 0: i64]) = 0 : f32;
+    *tensor_bias.access_fn([1: i64, 1: i64]) = 0 : f32;
+    *tensor_bias.access_fn([1: i64, 2: i64]) = 0 : f32;
+    *tensor_bias.access_fn([1: i64, 3: i64]) = 0 : f32;
+    *tensor_bias.access_fn([1: i64, 4: i64]) = 0 : f32;
+    *tensor_bias.access_fn([1: i64, 5: i64]) = 0 : f32;
+
+    let output_size = (4, [1: i64, 2: i64, 3: i64, 2: i64]);
+    let kernel_size = (2, [2: i64, 2: i64]);
+    let stride = (2, [1: i64, 1: i64]);
+    let padding = (2, [0: i64, 0: i64]);
+
+    let im2colsize = (2, [4: i64, 6: i64]);
+    let gemm_output_size = (2, [2: i64, 6: i64]);
+
+    let im2colset = @matrix_im2col_setup(im2colsize, kernel_size, stride, padding);
+    let gemmset = @matrix_gemm_setup(gemm_output_size);
+
+    let im2coloutput = @matrix_im2col_impl(tensor_input, output_size, kernel_size, stride, padding, im2colset);
+    print_tensor("weight", tensor_weight);
+    print_tensor_256("im2col", im2coloutput);
+    print_tensor("bias", tensor_bias);
+    let gemm_result = @matrix_gemm_impl(tensor_weight, im2coloutput, tensor_bias, gemm_output_size, gemmset);
+    print_tensor_256("gemm", gemm_result);
+
+    let result_tensor = @matrix_reshape[f32](gemm_result, output_size);
+
+    print_tensor_256("result", result_tensor);
+
+    result_buffer = result_tensor.buffer;
+
+    let result_data = bitcast[&[f32]](result_buffer.data);
+
+    let result_buffer_offset = Buffer {
+        data = bitcast[&mut[i8]](&result_data(3 * 2)),
+        size = 0,
+        device = 0
+    };
+
+    write_idx_scaled("result.idx", 3, [2, 3, 2], [result_buffer, result_buffer_offset]);
+}
