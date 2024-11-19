@@ -2,6 +2,10 @@ fn @round_down(n: i32, d: i32) -> i32 {
   (n / d) * d
 }
 
+struct Zero[T] { value : T }
+implicit = Zero[f16] { value = 0 };
+implicit = Zero[f32] { value = 0 };
+
 /*fn @atomic_add (p: &mut f32, d : f32) {
     atomic[f32](11, p, d, 7, "");
 }

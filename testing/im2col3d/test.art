@@ -24,8 +24,8 @@ fn main() -> () {
     let stride = (2, [1: i64, 1: i64]);
     let padding = (2, [0: i64, 0: i64]);
 
-    let setup = matrix_im2col_setup(output_size, kernel_size, stride, padding);
-    let output = matrix_im2col_impl(tensor_a, output_size, kernel_size, stride, padding, setup);
+    let setup = matrix_im2col_setup[f32](output_size, kernel_size, stride, padding);
+    let output = matrix_im2col_impl[f32](tensor_a, output_size, kernel_size, stride, padding, setup);
 
     print_tensor("result", output);
 

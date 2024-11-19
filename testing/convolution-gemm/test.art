@@ -41,10 +41,10 @@ fn main() -> () {
     let im2colsize = (2, [4: i64, 6: i64]);
     let gemm_output_size = (2, [2: i64, 6: i64]);
 
-    let im2colset = @matrix_im2col_setup(im2colsize, kernel_size, stride, padding);
+    let im2colset = @matrix_im2col_setup[f32](im2colsize, kernel_size, stride, padding);
     let gemmset = @matrix_gemm_setup(gemm_output_size);
 
-    let im2coloutput = @matrix_im2col_impl(tensor_input, output_size, kernel_size, stride, padding, im2colset);
+    let im2coloutput = @matrix_im2col_impl[f32](tensor_input, output_size, kernel_size, stride, padding, im2colset);
     print_tensor("weight", tensor_weight);
     print_tensor_256("im2col", im2coloutput);
     print_tensor("bias", tensor_bias);

@@ -11,9 +11,9 @@ fn main() -> () {
 
     print_tensor("input a", tensor_a);
 
-    let setup = matrix_im2col_setup((2, [4, 6]), (2, [2, 2]), (2, [1, 1]), (2, [0, 0]));
+    let setup = @matrix_im2col_setup[f32]((2, [4, 6]), (2, [2, 2]), (2, [1, 1]), (2, [0, 0]));
 
-    let output = matrix_im2col_impl(tensor_a, (2, [4, 6]), (2, [2, 2]), (2, [1, 1]), (2, [0, 0]), setup);
+    let output = @matrix_im2col_impl[f32](tensor_a, (2, [4, 6]), (2, [2, 2]), (2, [1, 1]), (2, [0, 0]), setup);
 
     print_tensor("result", output);
 
