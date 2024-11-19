@@ -38,46 +38,30 @@ fn @matrix_gemm_f32 (A: Tensor[f32], B: Tensor[f32], C: Tensor[f32], output_size
 
 
 #[intern]
-fn @matrix_gemm_accelerated_setup (output_size: (i32, &[i64])) {
-    let nvvm = nvvm_accelerator(0);
-
+fn @matrix_gemm_accelerated_setup (nvvm: Accelerator, output_size: (i32, &[i64])) {
     fn @output_size_fn (n : i32) -> i64 { output_size.1(n) };
 
-    let output = @alloc_tensor[f16] (output_size.0, output_size_fn);
+    let output_buffer = nvvm.alloc(sizeof[f16]() * output_size.1(0) * output_size.1(1));
+    let output = @build_tensor[f16] (output_buffer, output_size.0, output_size_fn);
 
-    let N = output_size.1(0);
-    let M = output_size.1(1);
-    let K = output_size.1(0); //TODO: argument?
-
-    let acontainer = nvvm.alloc(sizeof[f16]() * M * K);
-    let bcontainer = nvvm.alloc(sizeof[f16]() * K * N);
-    let ccontainer = nvvm.alloc(sizeof[f16]() * M * N);
-    let dcontainer = nvvm.alloc(sizeof[f16]() * M * N);
-
-    (nvvm, acontainer, bcontainer, ccontainer, dcontainer, output)
+    output
 }
 
 #[intern]
-fn @matrix_gemm_accelerated_impl (A: Tensor[f16], B: Tensor[f16], C: Tensor[f16], output_size: (i32, &[i64]), setup: (Accelerator, Buffer, Buffer, Buffer, Buffer, Tensor[f16])) -> Tensor[f16] {
-    let (nvvm, acontainer, bcontainer, ccontainer, dcontainer, output) = setup;
-
-    copy(A.buffer, acontainer);
-    copy(B.buffer, bcontainer);
-    copy(C.buffer, ccontainer);
+fn @matrix_gemm_accelerated_impl (nvvm: Accelerator, A: Tensor[f16], B: Tensor[f16], C: Tensor[f16], output_size: (i32, &[i64]), setup: Tensor[f16]) -> Tensor[f16] {
+    let output = setup;
 
     //TODO: This has only been tested for quadratic matricies, it is likely that the dimensions are messed up.
     let N = output_size.1(0) as i32;
     let M = output_size.1(1) as i32;
     let K = output_size.1(0) as i32; //TODO: argument?
 
-    let a_matrix = Matrix { data = bitcast[&mut[f16]](acontainer.data), x_dim = K, y_dim = M, addr_mode = A.addr_mode, stride = match A.addr_mode { AddrMode::RowMayor => K, AddrMode::ColMayor => M } };
-    let b_matrix = Matrix { data = bitcast[&mut[f16]](bcontainer.data), x_dim = N, y_dim = K, addr_mode = B.addr_mode, stride = match B.addr_mode { AddrMode::RowMayor => N, AddrMode::ColMayor => K } };
-    let c_matrix = Matrix { data = bitcast[&mut[f16]](ccontainer.data), x_dim = N, y_dim = M, addr_mode = C.addr_mode, stride = match C.addr_mode { AddrMode::RowMayor => N, AddrMode::ColMayor => M } };
-    let d_matrix = Matrix { data = bitcast[&mut[f16]](dcontainer.data), x_dim = N, y_dim = M, addr_mode = C.addr_mode, stride = match C.addr_mode { AddrMode::RowMayor => N, AddrMode::ColMayor => M } };
+    let a_matrix = Matrix { data = bitcast[&mut[f16]](A.buffer.data), x_dim = K, y_dim = M, addr_mode = A.addr_mode, stride = match A.addr_mode { AddrMode::RowMayor => K, AddrMode::ColMayor => M } };
+    let b_matrix = Matrix { data = bitcast[&mut[f16]](B.buffer.data), x_dim = N, y_dim = K, addr_mode = B.addr_mode, stride = match B.addr_mode { AddrMode::RowMayor => N, AddrMode::ColMayor => K } };
+    let c_matrix = Matrix { data = bitcast[&mut[f16]](C.buffer.data), x_dim = N, y_dim = M, addr_mode = C.addr_mode, stride = match C.addr_mode { AddrMode::RowMayor => N, AddrMode::ColMayor => M } };
+    let d_matrix = Matrix { data = bitcast[&mut[f16]](output.buffer.data), x_dim = N, y_dim = M, addr_mode = C.addr_mode, stride = match C.addr_mode { AddrMode::RowMayor => N, AddrMode::ColMayor => M } };
 
     matrix_multiply_nvvm(nvvm, a_matrix, b_matrix, c_matrix, d_matrix);
-
-    copy(dcontainer, output.buffer);
 
     output
 }

@@ -12,3 +12,5 @@ add_subdirectory(gemm)
 add_subdirectory(gemm-256)
 add_subdirectory(im2col)
 add_subdirectory(im2col3d)
+
+add_subdirectory(gemm-nvvm)

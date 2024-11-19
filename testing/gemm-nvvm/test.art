@@ -1,0 +1,57 @@
+#[intern] fn @load_A() -> Tensor[f32];
+#[intern] fn @load_B() -> Tensor[f32];
+#[intern] fn @load_C() -> Tensor[f32];
+
+#[export]
+fn main() -> () {
+    let nvvm = nvvm_accelerator(0);
+
+    let size = 256 : i64;
+    let output_size = (2, [size, size]);
+
+    let tensor_A_f32 = load_A();
+    let tensor_B_f32 = load_B();
+    let tensor_C_f32 = load_C();
+
+    let tensor_D_f32 = alloc_tensor[f32](2, @|_n| { size });
+
+
+    print_tensor("A", tensor_A_f32);
+    print_tensor("B", tensor_B_f32);
+    print_tensor("C", tensor_C_f32);
+
+
+    let tensor_A = alloc_tensor[f16](2, @|_n| { size });
+    let tensor_B = alloc_tensor[f16](2, @|_n| { size });
+    let tensor_C = alloc_tensor[f16](2, @|_n| { size });
+    let tensor_D = alloc_tensor[f16](2, @|_n| { size });
+
+    copy_tensor_f32_f16(tensor_A_f32, tensor_A);
+    copy_tensor_f32_f16(tensor_B_f32, tensor_B);
+    copy_tensor_f32_f16(tensor_C_f32, tensor_C);
+
+
+    let acontainer = nvvm.alloc(sizeof[f16]() * size * size);
+    let bcontainer = nvvm.alloc(sizeof[f16]() * size * size);
+    let ccontainer = nvvm.alloc(sizeof[f16]() * size * size);
+
+    let tensor_A_nvvm = build_tensor[f16](acontainer, 2, @|_n| { size });
+    let tensor_B_nvvm = build_tensor[f16](bcontainer, 2, @|_n| { size });
+    let tensor_C_nvvm = build_tensor[f16](ccontainer, 2, @|_n| { size });
+
+    copy(tensor_A.buffer, acontainer);
+    copy(tensor_B.buffer, bcontainer);
+    copy(tensor_C.buffer, ccontainer);
+
+
+    let setup = matrix_gemm_accelerated_setup(nvvm, output_size);
+    let output = matrix_gemm_accelerated_impl(nvvm, tensor_A_nvvm, tensor_B_nvvm, tensor_C_nvvm, output_size, setup);
+
+
+    copy(output.buffer, tensor_D.buffer);
+    copy_tensor_f16_f32(tensor_D, tensor_D_f32);
+
+    print_tensor("D", tensor_D_f32);
+
+    write_idx_float("result.idx", 2, [size, size], tensor_D_f32.buffer);
+}

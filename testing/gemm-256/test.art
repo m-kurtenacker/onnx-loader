@@ -4,34 +4,22 @@
 
 #[export]
 fn main() -> () {
-    let tensor_A_f32 = load_A();
-    let tensor_B_f32 = load_B();
-    let tensor_C_f32 = load_C();
+    let tensor_A = load_A();
+    let tensor_B = load_B();
+    let tensor_C = load_C();
 
     let size = 256 : i64;
 
-    let tensor_D_f32 = alloc_tensor[f32](2, @|_n| { size });
-
-    print_tensor("A", tensor_A_f32);
-    print_tensor("B", tensor_B_f32);
-    print_tensor("C", tensor_C_f32);
-
-    let tensor_A = alloc_tensor[f16](2, @|_n| { size });
-    let tensor_B = alloc_tensor[f16](2, @|_n| { size });
-    let tensor_C = alloc_tensor[f16](2, @|_n| { size });
-
-    copy_tensor_f32_f16(tensor_A_f32, tensor_A);
-    copy_tensor_f32_f16(tensor_B_f32, tensor_B);
-    copy_tensor_f32_f16(tensor_C_f32, tensor_C);
+    print_tensor("A", tensor_A);
+    print_tensor("B", tensor_B);
+    print_tensor("C", tensor_C);
 
     let output_size = (2, [size, size]);
 
-    let setup = matrix_gemm_accelerated_setup(output_size);
-    let output = matrix_gemm_accelerated_impl(tensor_A, tensor_B, tensor_C, output_size, setup);
+    let setup = matrix_gemm_setup(output_size);
+    let output = matrix_gemm_impl(tensor_A, tensor_B, tensor_C, output_size, setup);
 
-    copy_tensor_f16_f32(output, tensor_D_f32);
+    print_tensor("D", output);
 
-    print_tensor("D", tensor_D_f32);
-
-    write_idx_float("result.idx", 2, [size, size], tensor_D_f32.buffer);
+    write_idx_float("result.idx", 2, [size, size], output.buffer);
 }
