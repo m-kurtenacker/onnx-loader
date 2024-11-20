@@ -1,19 +1,13 @@
 //#[intern]
 fn @matrix_im2col_setup[T](output_size: (i32, &[i64]), _kernel_shape: (i32, &[i64]), _stride: (i32, &[i64]), _padding: (i32, &[i64])) {
-    //let nvvm = nvvm_accelerator(0);
-
     fn @output_size_fn(n : i32) -> i64 { output_size.1(n) }
     let output_tensor = @alloc_tensor[T](output_size.0, output_size_fn);
 
-    //(nvvm, output_tensor)
     output_tensor
 }
 
 //#[intern]
 fn @matrix_im2col_impl[T](input: Tensor[T], _output_size: (i32, &[i64]), kernel_shape: (i32, &[i64]), _stride: (i32, &[i64]), _padding: (i32, &[i64]), output: Tensor[T], implicit zero : Zero[T]) -> Tensor[T] {
-    //TODO: fill padding area
-    //let (nvvm, output) = setup;
-
     if input.num_dims == 2 {
         let chan_offset = 0;
 

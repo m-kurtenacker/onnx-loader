@@ -7,9 +7,9 @@ fn @matrix_convolution_padded_impl (input: Tensor[f32], weight: Tensor[f32], bia
     let num_out_chan = output.size_fn(1) as i32;
     let num_in_chan = weight.size_fn(1) as i32;
 
-    let batch = 0;
+    //let batch = 0;
 
-    //for batch in range(0, output.size_fn(0) as i32) {
+    for batch in range(0, output.size_fn(0) as i32) {
         for x in range_step(0, output.size_fn(2) as i32, stride.1(0) as i32) {
             for y in range_step(0, output.size_fn(3) as i32, stride.1(1) as i32) {
 
@@ -50,7 +50,7 @@ fn @matrix_convolution_padded_impl (input: Tensor[f32], weight: Tensor[f32], bia
                 }
             }
         }
-    //}
+    }
 
     //time_conv += get_micro_time() - start;
     output

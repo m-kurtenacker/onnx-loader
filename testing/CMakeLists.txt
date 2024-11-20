@@ -5,6 +5,7 @@ add_subdirectory(reshape_onnx)
 add_subdirectory(import_idx)
 add_subdirectory(extract_onnx_initializers)
 add_subdirectory(multiply)
+
 add_subdirectory(convolution)
 add_subdirectory(convolution-onnx)
 add_subdirectory(convolution-gemm)

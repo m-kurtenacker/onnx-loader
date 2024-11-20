@@ -158,8 +158,10 @@ fn @read_idx_poly[T](filename : &[u8]) -> Buffer {
 
 #[import(cc = "C", name = "write_idx")] fn write_idx_cpp(_filename: &[u8], _dims: &[i64], _data: &[u8], _type: u8) -> ();
 
-#[intern]
-fn write_idx_float(filename : &[u8], num_dims : i32, dims : &[i64], items : Buffer) -> () {
+struct idx_id[_] { id : u8 }
+implicit = idx_id[f32] { id = 0xd };
+
+fn write_idx[T](filename : &[u8], num_dims : i32, dims : &[i64], items : Buffer, implicit id : idx_id[T]) -> () {
     let dims_buffer = alloc_cpu(sizeof[i64]() * (num_dims + 1) as i64);
 
     let local_dims = bitcast[&mut[i64]](dims_buffer.data);
@@ -168,8 +170,11 @@ fn write_idx_float(filename : &[u8], num_dims : i32, dims : &[i64], items : Buff
     }
     local_dims(num_dims) = 0; //Terminator for C.
 
-    write_idx_cpp (filename, local_dims, bitcast[&[u8]](items.data), 0xd);
+    write_idx_cpp (filename, local_dims, bitcast[&[u8]](items.data), id.id);
 }
+
+#[intern]
+fn write_idx_float(filename : &[u8], num_dims : i32, dims : &[i64], items : Buffer) = write_idx[f32](filename : &[u8], num_dims : i32, dims : &[i64], items : Buffer);
 
 fn write_idx_scaled(filename : &[u8], num_dims : i32, dims : &[i64], items : &[Buffer]) -> () {
     let mut total_size = 1 : i64;

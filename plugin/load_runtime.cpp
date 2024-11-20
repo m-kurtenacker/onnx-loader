@@ -9,9 +9,9 @@ using namespace ONNX_NAMESPACE;
 extern "C" {
 
 void load_matrix_dynamic (void * tensor_data_ptr, char * file_name, char * matrix_name) {
-    if (reinterpret_cast<int*>(tensor_data_ptr)[0] != 0) {
+    /*if (reinterpret_cast<int*>(tensor_data_ptr)[0] != 0) {
         return;
-    }
+    }*/
 
     const std::string model_path(file_name);
     //std::cerr << "Loading model " << model_path << std::endl;
