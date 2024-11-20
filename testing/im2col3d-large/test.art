@@ -1,7 +1,11 @@
 static B = 64 : i64;
-static C = 1 : i64;
+static C = 16 : i64;
 static H = 224 : i64;
 static W = 224 : i64;
+
+static KERN_SIZE = 5 : i64;
+static STRIDE = 3 : i64;
+static PADDING = 2 : i64;
 
 #[export]
 fn main() -> () {
@@ -19,15 +23,16 @@ fn main() -> () {
 
     print_tensor("input a", tensor_a);
 
-    let output_size = (2, [4: i64, B * C * (H - 1) * (W - 1)]);
-    let kernel_size = (2, [2: i64, 2: i64]);
-    let stride = (2, [1: i64; 2]);
-    let padding = (4, [0: i64; 4]);
+    let output_size = (2, [KERN_SIZE * KERN_SIZE * C, B * (((H + 2 * PADDING - KERN_SIZE + 1) + STRIDE - 1) / STRIDE) * (((W + 2 * PADDING - KERN_SIZE + 1) + STRIDE - 1) / STRIDE)]);
+
+    let kernel_size = (2, [KERN_SIZE, KERN_SIZE]);
+    let stride = (2, [STRIDE, STRIDE]);
+    let padding = (4, [PADDING, PADDING, PADDING, PADDING]);
 
     let setup = matrix_im2col_setup[f32](output_size, kernel_size, stride, padding);
     let output = matrix_im2col_impl[f32](tensor_a, output_size, kernel_size, stride, padding, setup);
 
     print_tensor("result", output);
 
-    write_idx_float ("result.idx", 2, [4, B * C * (H - 1) * (W - 1)], output.buffer);
+    write_idx_float ("result.idx", output_size.0, output_size.1, output.buffer);
 }

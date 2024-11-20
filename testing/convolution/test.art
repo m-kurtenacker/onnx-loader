@@ -28,8 +28,8 @@ fn main() -> () {
 
     let output_size = (4, [1: i64, 2: i64, 3: i64, 2: i64]);
     let kernel_shape = (2, [2: i64, 2: i64]);
-    let stride = (2, [1: i64, 1: i64]);
-    let padding = (2, [0: i64, 0: i64]);
+    let stride = (2, [1: i64; 2]);
+    let padding = (4, [0: i64; 4]);
 
     let result_tensor = @matrix_convolution_padded(tensor_input, tensor_weight, tensor_bias, output_size, kernel_shape, stride, padding);
 

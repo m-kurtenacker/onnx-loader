@@ -7,7 +7,7 @@ fn @matrix_im2col_setup[T](output_size: (i32, &[i64]), _kernel_shape: (i32, &[i6
 }
 
 //#[intern]
-fn @matrix_im2col_impl[T](input: Tensor[T], _output_size: (i32, &[i64]), kernel_shape: (i32, &[i64]), _stride: (i32, &[i64]), _padding: (i32, &[i64]), output: Tensor[T], implicit zero : Zero[T]) -> Tensor[T] {
+fn @matrix_im2col_impl[T](input: Tensor[T], _output_size: (i32, &[i64]), kernel_shape: (i32, &[i64]), stride: (i32, &[i64]), padding: (i32, &[i64]), output: Tensor[T], implicit zero : Zero[T]) -> Tensor[T] {
     if input.num_dims == 2 {
         let chan_offset = 0;
 
@@ -48,26 +48,25 @@ fn @matrix_im2col_impl[T](input: Tensor[T], _output_size: (i32, &[i64]), kernel_
 
         for batch in range(0, input.size_fn(0) as i32) {
             for chan in range(0, input.size_fn(1) as i32) {
-                for x in range(0, input.size_fn(chan_offset + 1) as i32) {
-                    for y in range(0, input.size_fn(chan_offset) as i32) {
-
-                        let value = *input.access_fn([batch as i64, chan as i64, y as i64, x as i64]);
-                        //let value = batch as f32;
-
+                for x in range_step(- padding.1(1) as i32, input.size_fn(chan_offset + 1) as i32 + padding.1(3) as i32 - kernel_shape.1(1) as i32 + 1, stride.1(1) as i32) {
+                    for y in range_step(- padding.1(0) as i32, input.size_fn(chan_offset) as i32 + padding.1(2) as i32 - kernel_shape.1(0) as i32 + 1, stride.1(0) as i32) {
                         for xk in range(0, kernel_shape.1(1) as i32) {
                             for yk in range(0, kernel_shape.1(0) as i32) {
+                                let value = if x + xk >= 0 && x + xk < input.size_fn(3) as i32 && y + yk >= 0 && y + yk < input.size_fn(2) as i32 {
+                                                *input.access_fn([batch as i64, chan as i64, y as i64 + yk as i64, x as i64 + xk as i64])
+                                            } else {
+                                                zero.value
+                                            };
+
                                 let output_position = [
-                                    yk as i64 * kernel_shape.1(0) + xk as i64,
-                                      batch as i64 * input.size_fn(1)
-                                                   * (input.size_fn(chan_offset) - kernel_shape.1(0) + 1)
-                                                   * (input.size_fn(chan_offset + 1) - kernel_shape.1(1) + 1)
-                                    + (y - yk) as i64 * (input.size_fn(chan_offset + 1) - kernel_shape.1(1) + 1)
-                                    + (x - xk) as i64
+                                    chan as i64 * kernel_shape.1(0) * kernel_shape.1(1) + yk as i64 * kernel_shape.1(0) + xk as i64,
+                                      batch as i64 * (((input.size_fn(chan_offset) + padding.1(1) + padding.1(3) - kernel_shape.1(0) + 1) + stride.1(0) - 1) / stride.1(0))
+                                                   * (((input.size_fn(chan_offset + 1) + padding.1(0) + padding.1(2) - kernel_shape.1(1) + 1) + stride.1(1) - 1) / stride.1(1))
+                                    + (y as i64 + padding.1(0)) / stride.1(0) * (((input.size_fn(chan_offset + 1) + padding.1(1) + padding.1(3) - kernel_shape.1(1) + 1) + stride.1(1) - 1) / stride.1(1))
+                                    + (x as i64 + padding.1(1)) / stride.1(1)
                                 ];
 
-                                if x - xk >= 0 && x - xk < (input.size_fn(chan_offset + 1) - kernel_shape.1(1) + 1) as i32 && y - yk >= 0 && y - yk < (input.size_fn(chan_offset) - kernel_shape.1(0) + 1) as i32 {
-                                    *output.access_fn(output_position) = value;
-                                }
+                                *output.access_fn(output_position) = value;
                             }
                         }
                     }
