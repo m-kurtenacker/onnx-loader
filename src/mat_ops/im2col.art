@@ -78,3 +78,25 @@ fn @matrix_im2col_impl[T](input: Tensor[T], _output_size: (i32, &[i64]), kernel_
 
     output
 }
+
+fn @matrix_col2im_setup[T](output_size: (i32, &[i64])) {
+    fn @output_size_fn(n : i32) -> i64 { output_size.1(n) }
+    let output_tensor = @alloc_tensor[T](output_size.0, output_size_fn);
+
+    output_tensor
+}
+
+fn @matrix_col2im_impl[T](input: Tensor[T], _output_size: (i32, &[i64]), output: Tensor[T]) -> Tensor[T] {
+    for batch in range(0, output.size_fn(0) as i32) {
+        for chan in range(0, output.size_fn(1) as i32) {
+            for x in range(0, output.size_fn(2) as i32) {
+                for y in range(0, output.size_fn(3) as i32) {
+                    let value = *input.access_fn([chan as i64, batch as i64 * output.size_fn(2) * output.size_fn(3) + x as i64 * output.size_fn(3) + y as i64]);
+                    *output.access_fn([batch as i64, chan as i64, x as i64, y as i64]) = value;
+                }
+            }
+        }
+    }
+
+    output
+}

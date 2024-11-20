@@ -15,3 +15,4 @@ add_subdirectory(im2col)
 add_subdirectory(im2col3d)
 
 add_subdirectory(gemm-nvvm)
+add_subdirectory(convolution-im2col)
