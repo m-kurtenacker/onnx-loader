@@ -1,0 +1,13 @@
+#[export]
+fn main() -> () {
+    let data = read_idx_float("test.idx");
+    let tensor_data = build_tensor[f32](data, 4, @|_n : i32| { 4: i64 });
+
+    let output_size = (4, [4: i64; 4]);
+
+    let relu_setup = matrix_relu_setup(output_size);
+
+    let result_tensor = matrix_relu_impl(tensor_data, output_size, relu_setup);
+
+    write_idx[f32]("result.idx", output_size.0, output_size.1, result_tensor.buffer);
+}

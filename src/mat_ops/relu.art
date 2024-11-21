@@ -1,0 +1,24 @@
+//#[export] static mut time_relu : i64;
+
+#[intern]
+fn @matrix_relu_setup (output_size: (i32, &[i64])) {
+    fn @output_size_fn(n : i32) -> i64 { output_size.1(n) }
+    @alloc_tensor[f32](output_size.0, output_size_fn)
+}
+
+#[intern]
+fn @matrix_relu_impl (mat: Tensor[f32], output_size: (i32, &[i64]), output: Tensor[f32]) -> Tensor[f32] {
+    //let start = get_micro_time();
+
+    for instance in multi_loop(output_size.0, output_size.1) {
+        let d = *mat.access_fn(instance.index);
+
+        let r = if d < 0 { 0 as f32 } else { d };
+
+        *output.access_fn(instance.index) = r;
+    }
+
+    //time_relu += get_micro_time() - start;
+
+    output
+}
