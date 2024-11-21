@@ -1,0 +1,224 @@
+static onnx_file_name = "super-resolution-10.onnx";
+
+fn @conv_im2col_size(input_size: (i32, &[i64]), kernel_size: (i32, &[i64]), stride: (i32, &[i64]), padding: (i32, &[i64]), _out_channels: i64) {
+    (2, [kernel_size.1(0) * kernel_size.1(1) * input_size.1(1),
+         input_size.1(0) *
+            ((input_size.1(2) + padding.1(0) + padding.1(2) - kernel_size.1(0) + 1 + stride.1(0) - 1) / stride.1(0)) *
+            ((input_size.1(3) + padding.1(1) + padding.1(3) - kernel_size.1(1) + 1 + stride.1(1) - 1) / stride.1(1))
+    ])
+}
+
+fn @conv_kernel_reshape_size(input_size: (i32, &[i64]), kernel_size: (i32, &[i64]), _stride: (i32, &[i64]), _padding: (i32, &[i64]), out_channels: i64) {
+    (2, [out_channels, kernel_size.1(0) * kernel_size.1(1) * input_size.1(1)])
+}
+
+fn @conv_gemm_output_size(input_size: (i32, &[i64]), kernel_size: (i32, &[i64]), stride: (i32, &[i64]), padding: (i32, &[i64]), out_channels: i64) {
+    (2, [out_channels,
+         input_size.1(0) *
+            ((input_size.1(2) + padding.1(0) + padding.1(2) - kernel_size.1(0) + 1 + stride.1(0) - 1) / stride.1(0)) *
+            ((input_size.1(3) + padding.1(1) + padding.1(3) - kernel_size.1(0) + 1 + stride.1(1) - 1) / stride.1(1))
+    ])
+}
+
+fn @conv_output_size(input_size: (i32, &[i64]), kernel_size: (i32, &[i64]), stride: (i32, &[i64]), padding: (i32, &[i64]), out_channels: i64) {
+    (4, [input_size.1(0),
+         out_channels,
+         ((input_size.1(2) + padding.1(0) + padding.1(2) - kernel_size.1(0) + 1 + stride.1(0) - 1) / stride.1(0)),
+         ((input_size.1(3) + padding.1(1) + padding.1(3) - kernel_size.1(1) + 1 + stride.1(1) - 1) / stride.1(1))
+    ])
+}
+
+
+fn @conv_layer_setup(input_size: (i32, &[i64]), kernel_size: (i32, &[i64]), stride: (i32, &[i64]), padding: (i32, &[i64]), out_channels: i64, weight_name: &[u8], bias_name: &[u8]) {
+    let kernel_reshape_size = conv_kernel_reshape_size(input_size, kernel_size, stride, padding, out_channels);
+    let im2col_size         = conv_im2col_size(input_size, kernel_size, stride, padding, out_channels);
+    let gemm_size           = conv_gemm_output_size(input_size, kernel_size, stride, padding, out_channels);
+    let output_size         = conv_output_size(input_size, kernel_size, stride, padding, out_channels);
+
+    let tensor_weight = alloc_tensor_f32(kernel_size.0 + 2, @|n: i32| { match n { 0 => out_channels, 1 => input_size.1(1), _ => kernel_size.1(n - 2) }});
+    let tensor_bias = alloc_tensor_f32(1, @|n: i32| { match n { 0 => out_channels, _ => 0 }});
+    load_matrix_dynamic[f32](bitcast[&mut[f32]](tensor_weight.buffer.data), onnx_file_name, weight_name);
+    load_matrix_dynamic[f32](bitcast[&mut[f32]](tensor_bias.buffer.data), onnx_file_name, bias_name);
+    //print_tensor("weight", tensor_weight);
+    //print_tensor("bias", tensor_bias);
+
+    let tensor_weight_flat = @matrix_reshape[f32](tensor_weight, kernel_reshape_size);
+
+    let tensor_bias_flat = alloc_tensor_f32(gemm_size.0, @|n: i32| { gemm_size.1(n) });
+    for i in range(0, gemm_size.1(0) as i32) {
+        for k in range(0, gemm_size.1(1) as i32) {
+            *tensor_bias_flat.access_fn([i as i64, k as i64]) = *tensor_bias.access_fn([i as i64]);
+        }
+    }
+
+    let im2col_setup = @matrix_im2col_setup[f32](im2col_size, kernel_size, stride, padding);
+    let gemm_setup   = @matrix_gemm_setup(gemm_size);
+    let col2im_setup = @matrix_col2im_setup[f32](output_size);
+
+    (output_size, gemm_size, tensor_weight_flat, tensor_bias_flat, im2col_setup, gemm_setup, col2im_setup)
+}
+
+
+#[export]
+fn main() -> () {
+    let input_data = read_idx_float("test.idx");
+
+    let batch_size = 64:i64;
+    let size = 224:i64;
+
+    /* Input tensor. */
+    let input_size = (4, [batch_size, 1, size, size]);
+    let tensor_input = build_tensor_f32(input_data, input_size.0, @|n : i32| { input_size.1(n) });
+    //print_tensor("input", tensor_input);
+
+
+    /* First layer convolution setup */
+    let c1_input_size = input_size;
+
+    let c1_kernel_size = (2, [5: i64; 2]);
+    let c1_stride = (2, [1: i64; 2]);
+    let c1_padding = (4, [2: i64; 4]);
+    let c1_out_channels = 64: i64;
+
+    let (c1_output_size, c1_gemm_size, c1_tensor_weight_flat, c1_tensor_bias_flat, c1_im2col_setup, c1_gemm_setup, c1_col2im_setup) = conv_layer_setup(c1_input_size, c1_kernel_size, c1_stride, c1_padding, c1_out_channels, "conv1.weight", "conv1.bias");
+
+    /* Relu 1 setup */
+    let r1_size = c1_output_size;
+    let r1_setup = @matrix_relu_setup(r1_size);
+
+    /* Second layer convolution setup */
+    let c2_input_size = r1_size;
+
+    let c2_kernel_size = (2, [3: i64; 2]);
+    let c2_stride = (2, [1: i64; 2]);
+    let c2_padding = (4, [1: i64; 4]);
+    let c2_out_channels = 64: i64;
+
+    let (c2_output_size, c2_gemm_size, c2_tensor_weight_flat, c2_tensor_bias_flat, c2_im2col_setup, c2_gemm_setup, c2_col2im_setup) = conv_layer_setup(c2_input_size, c2_kernel_size, c2_stride, c2_padding, c2_out_channels, "conv2.weight", "conv2.bias");
+
+    /* Relu 2 setup */
+    let r2_size = c2_output_size;
+    let r2_setup = @matrix_relu_setup(r2_size);
+
+    /* Theird layer convolution setup */
+    let c3_input_size = r2_size;
+
+    let c3_kernel_size = (2, [3: i64; 2]);
+    let c3_stride = (2, [1: i64; 2]);
+    let c3_padding = (4, [1: i64; 4]);
+    let c3_out_channels = 32: i64;
+
+    let (c3_output_size, c3_gemm_size, c3_tensor_weight_flat, c3_tensor_bias_flat, c3_im2col_setup, c3_gemm_setup, c3_col2im_setup) = conv_layer_setup(c3_input_size, c3_kernel_size, c3_stride, c3_padding, c3_out_channels, "conv3.weight", "conv3.bias");
+
+    /* Relu 2 setup */
+    let r3_size = c3_output_size;
+    let r3_setup = @matrix_relu_setup(r3_size);
+
+    /* Fourth layer convolution setup */
+    let c4_input_size = r3_size;
+
+    let c4_kernel_size = (2, [3: i64; 2]);
+    let c4_stride = (2, [1: i64; 2]);
+    let c4_padding = (4, [1: i64; 4]);
+    let c4_out_channels = 9: i64;
+
+    let (c4_output_size, c4_gemm_size, c4_tensor_weight_flat, c4_tensor_bias_flat, c4_im2col_setup, c4_gemm_setup, c4_col2im_setup) = conv_layer_setup(c4_input_size, c4_kernel_size, c4_stride, c4_padding, c4_out_channels, "conv4.weight", "conv4.bias");
+
+    /* First reshaping layer setup */
+    let reshape1_size = (6, [batch_size, 1, 3, 3, size, size]);
+    let reshape1_index_tensor = Tensor[i64] {
+        buffer = Buffer { data = bitcast[&mut [i8]](0), size = 0, device = 0},
+        num_dims = reshape1_size.0,
+        addr_mode = AddrMode::RowMayor,
+        size_fn = @|n: i32| { reshape1_size.1(n) },
+        access_fn = @|_n: &[i64]| { bitcast[&mut i64](0) }
+    };
+    let reshape1_setup = @matrix_reshape_setup(reshape1_size);
+
+    /* Transpose setup */
+    let transpose_output_size = (6, [batch_size, 1, size, 3, size, 3]);
+    let transpose_perm = (6, [0: i64, 1: i64, 4: i64, 2: i64, 5: i64, 3: i64]);
+    let transpose_setup = @matrix_transpose_setup(transpose_output_size, transpose_perm);
+
+    /* Second reshaping layer setup */
+    let reshape2_size = (4, [batch_size, 1, size * 3, size * 3]);
+    let reshape2_index_tensor = Tensor[i64] {
+        buffer = Buffer { data = bitcast[&mut [i8]](0), size = 0, device = 0},
+        num_dims = reshape2_size.0,
+        addr_mode = AddrMode::RowMayor,
+        size_fn = @|n: i32| { reshape2_size.1(n) },
+        access_fn = @|_n: &[i64]| { bitcast[&mut i64](0) }
+    };
+    let reshape2_setup = @matrix_reshape_setup(reshape2_size);
+
+
+    /* First layer convolution execute */
+    let c1_tensor_input = tensor_input;
+    let c1_im2col_output = @matrix_im2col_impl[f32](c1_tensor_input, c1_output_size, c1_kernel_size, c1_stride, c1_padding, c1_im2col_setup);
+    let c1_gemm_result = @matrix_gemm_impl(c1_tensor_weight_flat, c1_im2col_output, c1_tensor_bias_flat, c1_gemm_size, c1_gemm_setup);
+    let c1_output_tensor = @matrix_col2im_impl[f32](c1_gemm_result, c1_output_size, c1_col2im_setup);
+
+    /* Relu 1 execute */
+    let r1_input_tensor = c1_output_tensor;
+    let r1_output_tensor = @matrix_relu_impl(r1_input_tensor, r1_size, r1_setup);
+
+    print_tensor("r1_output", r1_output_tensor);
+
+    /* Second layer convolution execute */
+    let c2_tensor_input = r1_output_tensor;
+    let c2_im2col_output = @matrix_im2col_impl[f32](c2_tensor_input, c2_output_size, c2_kernel_size, c2_stride, c2_padding, c2_im2col_setup);
+    let c2_gemm_result = @matrix_gemm_impl(c2_tensor_weight_flat, c2_im2col_output, c2_tensor_bias_flat, c2_gemm_size, c2_gemm_setup);
+    let c2_output_tensor = @matrix_col2im_impl[f32](c2_gemm_result, c2_output_size, c2_col2im_setup);
+
+    /* Relu 2 execute */
+    let r2_input_tensor = c2_output_tensor;
+    let r2_output_tensor = @matrix_relu_impl(r2_input_tensor, r2_size, r2_setup);
+
+    release_tensor(r1_output_tensor);
+    print_tensor("r2_output", r2_output_tensor);
+
+    /* Theird layer convolution execute */
+    let c3_tensor_input = r2_output_tensor;
+    let c3_im2col_output = @matrix_im2col_impl[f32](c3_tensor_input, c3_output_size, c3_kernel_size, c3_stride, c3_padding, c3_im2col_setup);
+    let c3_gemm_result = @matrix_gemm_impl(c3_tensor_weight_flat, c3_im2col_output, c3_tensor_bias_flat, c3_gemm_size, c3_gemm_setup);
+    let c3_output_tensor = @matrix_col2im_impl[f32](c3_gemm_result, c3_output_size, c3_col2im_setup);
+
+    /* Relu 3 execute */
+    let r3_input_tensor = c3_output_tensor;
+    let r3_output_tensor = @matrix_relu_impl(r3_input_tensor, r3_size, r3_setup);
+
+    release_tensor(r2_output_tensor);
+    print_tensor("r3_output", r3_output_tensor);
+
+    /* Fourth layer convolution execute */
+    let c4_tensor_input = r3_output_tensor;
+    let c4_im2col_output = @matrix_im2col_impl[f32](c4_tensor_input, c4_output_size, c4_kernel_size, c4_stride, c4_padding, c4_im2col_setup);
+    let c4_gemm_result = @matrix_gemm_impl(c4_tensor_weight_flat, c4_im2col_output, c4_tensor_bias_flat, c4_gemm_size, c4_gemm_setup);
+    let c4_output_tensor = @matrix_col2im_impl[f32](c4_gemm_result, c4_output_size, c4_col2im_setup);
+
+    print_tensor("conv3_output", c4_output_tensor);
+
+    /* First reshaping layer execute */
+    let reshape1_tensor_input = c4_output_tensor;
+    let reshape1_output_tensor = @matrix_reshape_impl(reshape1_tensor_input, reshape1_index_tensor /*ignored*/, reshape1_size, reshape1_setup);
+
+    print_tensor("reshape1_output", reshape1_output_tensor);
+
+    /* Transpose execute */
+    let transpose_tensor_input = reshape1_output_tensor;
+    let transpose_output_tensor = @matrix_transpose_impl(transpose_tensor_input, transpose_output_size, transpose_perm, transpose_setup);
+
+    print_tensor("transpose_output", transpose_output_tensor);
+
+    /* Second reshaping layer execute */
+    let reshape2_tensor_input = transpose_output_tensor;
+    let reshape2_output_tensor = @matrix_reshape_impl(reshape2_tensor_input, reshape2_index_tensor /*ignored*/, reshape2_size, reshape2_setup);
+
+    print_tensor("reshape2_output", reshape2_output_tensor);
+
+
+    let result_tensor = reshape2_output_tensor;
+    let result_size = reshape2_size;
+    print_tensor("result", result_tensor);
+    write_idx[f32]("result.idx", result_size.0, result_size.1, result_tensor.buffer);
+}
