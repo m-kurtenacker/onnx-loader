@@ -1,0 +1,20 @@
+fn @matrix_transpose_setup (output_size: (i32, &[i64]), _perm: (i32, &[i64])) {
+    fn @output_size_fn(n : i32) -> i64 { output_size.1(n) }
+    @alloc_tensor[f32](output_size.0, output_size_fn)
+}
+
+fn @matrix_transpose_impl (mat: Tensor[f32], output_size: (i32, &[i64]), perm: (i32, &[i64]), output: Tensor[f32]) -> Tensor[f32] {
+    for instance in multi_loop(output_size.0, output_size.1) {
+        let oldworld_address_buffer = get_buffer_dynamic(0: i64, output_size.0 as i64);
+        let oldworld_address = bitcast[&mut [i64]](oldworld_address_buffer.data);
+
+        for target_index in range(0, output_size.0) {
+            let source_index = perm.1(target_index);
+            oldworld_address(source_index) = instance.index(target_index);
+        }
+
+        *output.access_fn(instance.index) = *mat.access_fn(oldworld_address);
+    }
+
+    output
+}
